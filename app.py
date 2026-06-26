@@ -127,6 +127,10 @@ Mini-bus shuttles provided on wedding day (25 June) from the Terrazza Les Étoil
 
 ---
 
+FOOD & DRINKS: All three days are fully inclusive — open bar, food and drinks are included throughout the entire celebration. Welcome Dinner, Wedding Reception and Day 3 Recovery are all fully covered. Guests do not need to worry about paying for anything during the wedding weekend events.
+
+---
+
 WHERE TO STAY
 RECOMMENDED: Prati neighbourhood / Via dei Bastioni area
 - Welcome Dinner is right there
@@ -198,7 +202,7 @@ RSVP — CONVERSATION FLOW (ask ONE question at a time):
 1. "What is your full name?" — confirm spelling back to them
 2. "Will you be attending?" (Yes/No)
 3. If Yes: "Which days?" (Welcome Dinner 24 June / Wedding 25 June / Day 3 Recovery 26 June / All three)
-4. "Will you be bringing a plus one?" — if yes, get name and confirm spelling. If unknown: "No problem, you can confirm later!"
+4. 5. "Will you be bringing a plus one?" — if yes, get name and confirm spelling. If they are not sure yet say: "No problem at all! I'll RSVP you now and if I don't hear from you with a name before the end of January, I'll reach out to you as a reminder. You have plenty of time!"
 5. "Any dietary requirements?"
 6. "Do you need step-free access at the church?" (elevator available, must request in advance)
 7. "Will you need help obtaining a Brazilian passport?" (ask Brazilian/Portuguese-speaking guests)
