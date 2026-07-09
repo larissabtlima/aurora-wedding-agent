@@ -487,6 +487,119 @@ def whatsapp_webhook():
     return Response('', status=200)
 
 
+@app.route('/zapi', methods=['POST'])
+def zapi_webhook():
+    """Handle incoming messages from Z-API (Brazilian WhatsApp number)."""
+    try:
+        data = request.get_json(force=True) or {}
+
+        # Z-API message format
+        # Only process incoming messages (not our own sent messages)
+        if data.get('fromMe', False):
+            return Response('', status=200)
+
+        # Extract message text
+        text = ''
+        msg_type = data.get('type', '')
+        if msg_type == 'ReceivedCallback':
+            text = data.get('text', {}).get('message', '')
+        elif 'text' in data:
+            text = data.get('text', {}).get('message', '') or data.get('text', '')
+
+        if not text:
+            # Voice message
+            if data.get('audio') or msg_type in ['AudioMessage', 'PTTMessage']:
+                text = '[voice message]'
+            else:
+                return Response('', status=200)
+
+        # Extract phone number
+        phone = data.get('phone', '') or data.get('from', '')
+        phone = phone.replace('@s.whatsapp.net', '').replace('whatsapp:', '').strip()
+        if not phone:
+            return Response('', status=200)
+
+        all_phones.add(phone)
+
+        # Get Aurora's response
+        if phone in ADMIN_NUMBERS:
+            upper_msg = text.upper()
+            if upper_msg.startswith('[ALL]') or upper_msg.startswith('[BRIDAL]'):
+                reply = handle_broadcast_zapi(text, phone)
+            else:
+                reply = get_admin_response(phone, text)
+        else:
+            reply = get_aurora_response(phone, text)
+
+        # Send reply via Z-API
+        send_zapi_message(phone, reply)
+
+    except Exception as e:
+        pass
+
+    return Response('', status=200)
+
+
+def send_zapi_message(phone, message):
+    """Send a WhatsApp message via Z-API."""
+    instance_id = os.environ.get("ZAPI_INSTANCE_ID", "")
+    token = os.environ.get("ZAPI_TOKEN", "")
+    if not instance_id or not token:
+        return
+
+    # Split long messages
+    chunks = []
+    while len(message) > 1500:
+        split_at = message.rfind(' ', 0, 1500)
+        if split_at == -1:
+            split_at = 1500
+        chunks.append(message[:split_at])
+        message = message[split_at:].strip()
+    chunks.append(message)
+
+    url = f"https://api.z-api.io/instances/{instance_id}/token/{token}/send-text"
+    for chunk in chunks:
+        try:
+            payload = json.dumps({"phone": phone, "message": chunk}).encode()
+            req = urllib.request.Request(
+                url,
+                data=payload,
+                headers={"Content-Type": "application/json"},
+                method="POST"
+            )
+            urllib.request.urlopen(req, timeout=10)
+        except:
+            pass
+
+
+def handle_broadcast_zapi(message_body, from_phone):
+    """Handle broadcast commands from Z-API admin."""
+    upper = message_body.upper()
+    if upper.startswith("[ALL]"):
+        broadcast_message = message_body[5:].strip()
+        recipients = list(all_phones - ADMIN_NUMBERS)
+        sent = 0
+        for phone in recipients:
+            try:
+                send_zapi_message(phone, f"📢 *Wedding Update*\n\n{broadcast_message}")
+                sent += 1
+            except:
+                pass
+        return f"✅ Broadcast sent to {sent} guests via Z-API!"
+    elif upper.startswith("[BRIDAL]"):
+        broadcast_message = message_body[8:].strip()
+        recipients = list(bridal_party_phones - ADMIN_NUMBERS)
+        sent = 0
+        for phone in recipients:
+            try:
+                send_zapi_message(phone, f"💐 *Bridal Party Update*\n\n{broadcast_message}")
+                sent += 1
+            except:
+                pass
+        return f"✅ Bridal party message sent to {sent} people via Z-API!"
+    return ""
+
+
 @app.route('/health', methods=['GET'])
 def health():
     return {'status': 'Aurora is live 💍', 'conversations': len(all_phones), 'rsvps': len(rsvp_data)}, 200
