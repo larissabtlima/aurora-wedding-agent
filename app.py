@@ -25,7 +25,22 @@ all_phones = set()      # everyone who has ever messaged
 processing = set()      # phones currently being processed (prevent duplicates)
 
 # ── ADMIN NUMBERS ──
-ADMIN_NUMBERS = {"+353833986529", "+19292277546"}
+# Stored without "+" or spaces so they match both Twilio-style ("+353...")
+# and Z-API-style ("353...", no plus) phone formats after normalization.
+ADMIN_NUMBERS_RAW = {"+353833986529", "+19292277546"}
+
+def normalize_phone(p):
+    """Strip +, spaces, and non-digit characters for consistent comparison."""
+    return re.sub(r'\D', '', p or '')
+
+ADMIN_NUMBERS_NORMALIZED = {normalize_phone(n) for n in ADMIN_NUMBERS_RAW}
+
+def is_admin(phone):
+    return normalize_phone(phone) in ADMIN_NUMBERS_NORMALIZED
+
+# Kept for any code that still references ADMIN_NUMBERS directly with "in" checks
+# on Twilio-style numbers (which always include "+").
+ADMIN_NUMBERS = ADMIN_NUMBERS_RAW
 
 # ── SPREADSHEET ──
 SPREADSHEET_ID = "1__SAxw3AMWy8Rb3LlRNzfw1MMIJ__4jc7PYpJ5RVDwk"
@@ -421,7 +436,7 @@ def handle_broadcast(message_body, from_number, to_number):
         broadcast_message = message_body[5:].strip()
         if not broadcast_message:
             return "Please include a message after [ALL]. Example: [ALL] The bus leaves in 10 minutes from Via dei Bastioni! 🚌"
-        recipients = list(all_phones - ADMIN_NUMBERS)
+        recipients = [p for p in all_phones if not is_admin(p)]
         sent = 0
         for phone in recipients:
             try:
@@ -435,7 +450,7 @@ def handle_broadcast(message_body, from_number, to_number):
         broadcast_message = message_body[8:].strip()
         if not broadcast_message:
             return "Please include a message after [BRIDAL]. Example: [BRIDAL] Bridesmaids meet at 2pm at the hotel lobby!"
-        recipients = list(bridal_party_phones - ADMIN_NUMBERS)
+        recipients = [p for p in bridal_party_phones if not is_admin(p)]
         sent = 0
         for phone in recipients:
             try:
@@ -463,14 +478,14 @@ def whatsapp_webhook():
     try:
         # Check if admin broadcast
         upper_msg = incoming_message.upper()
-        if phone_key in ADMIN_NUMBERS and (upper_msg.startswith("[ALL]") or upper_msg.startswith("[BRIDAL]")):
+        if is_admin(phone_key) and (upper_msg.startswith("[ALL]") or upper_msg.startswith("[BRIDAL]")):
             reply = handle_broadcast(incoming_message, from_number, to_number)
             if reply:
                 send_whatsapp_message(from_number, reply, to_number)
                 return Response('', status=200)
 
         # Check if admin query
-        if phone_key in ADMIN_NUMBERS:
+        if is_admin(phone_key):
             reply = get_admin_response(phone_key, incoming_message)
         else:
             reply = get_aurora_response(phone_key, incoming_message)
@@ -548,7 +563,7 @@ def zapi_webhook():
         all_phones.add(phone)
 
         # Get Aurora's response
-        if phone in ADMIN_NUMBERS:
+        if is_admin(phone):
             upper_msg = text.upper()
             if upper_msg.startswith('[ALL]') or upper_msg.startswith('[BRIDAL]'):
                 reply = handle_broadcast_zapi(text, phone)
@@ -623,7 +638,7 @@ def handle_broadcast_zapi(message_body, from_phone):
     upper = message_body.upper()
     if upper.startswith("[ALL]"):
         broadcast_message = message_body[5:].strip()
-        recipients = list(all_phones - ADMIN_NUMBERS)
+        recipients = [p for p in all_phones if not is_admin(p)]
         sent = 0
         for phone in recipients:
             try:
@@ -634,7 +649,7 @@ def handle_broadcast_zapi(message_body, from_phone):
         return f"✅ Broadcast sent to {sent} guests via Z-API!"
     elif upper.startswith("[BRIDAL]"):
         broadcast_message = message_body[8:].strip()
-        recipients = list(bridal_party_phones - ADMIN_NUMBERS)
+        recipients = [p for p in bridal_party_phones if not is_admin(p)]
         sent = 0
         for phone in recipients:
             try:
