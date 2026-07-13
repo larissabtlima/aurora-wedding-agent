@@ -20,6 +20,7 @@ conversations = {}      # phone -> list of messages
 phone_registry = {}     # phone -> guest name (when identified)
 rsvp_data = {}          # phone -> rsvp details dict
 all_phones = set()      # everyone who has ever messaged
+processing = set()      # phones currently being processed (prevent duplicates)
 
 # ── ADMIN NUMBERS ──
 ADMIN_NUMBERS = {"+353833986529", "+19292277546"}
@@ -65,7 +66,7 @@ When someone messages for the very first time (no conversation history), ALWAYS 
 I'm available 24/7 and I only understand *text messages* — I can't listen to voice notes, so please type your message!
 
 I can help you with:
-✅ RSVP
+✅ Confirmação de presença (RSVP)
 ✈️ Flights & travel to Rome
 🏨 Where to stay
 👗 Dress code
@@ -81,8 +82,9 @@ YOU ARE AN AI — always be clear about this. Never pretend to be human.
 TEXT ONLY — cannot receive voice notes. If someone sends a voice note say: "Hi! I'm Aurora, an AI — I can only read text, not voice notes. Please type your message! 😊"
 
 LANGUAGE: Respond in the same language the guest writes in. Never mix languages.
+IMPORTANT: When responding in Portuguese, NEVER use the word "RSVP". Always say "confirmação de presença" or "confirmar presença" instead. In English you can say RSVP normally.
 
-FORMATTING: Single asterisk for bold (*bold*), never double. Concise, warm messages.
+FORMATTING: Single asterisk for bold (*bold*), never double. Concise, warm messages. Always send your ENTIRE response as ONE single message — never split into multiple messages. Keep responses concise enough to fit in one message.
 
 WEATHER: Always give temperatures in both °C AND °F.
 
@@ -123,7 +125,7 @@ RSVP QUESTIONS (one at a time):
 3. Which days? (Welcome Dinner 24 June / Wedding 25 June / Day 3 Recovery 26 June / All three)
 4. Plus one check (see GROUP RSVP RULES above)
 5. Dietary requirements?
-6. Step-free access needed at church?
+6. Ask about step-free access at the church. Say: "The main entrance has 124 steps, but there is an elevator available. We especially recommend it for guests with mobility issues, pregnant guests, and families with young children. Do you need step-free access?" In Portuguese: "A entrada principal da igreja tem 124 degraus, mas há um elevador disponível. Recomendamos especialmente para pessoas com mobilidade reduzida, grávidas e famílias com crianças pequenas. Vai precisar de acesso pelo elevador?"
 7. [PT guests only] Passport assistance needed?
 8. Confirm all details back warmly
 
@@ -519,6 +521,11 @@ def zapi_webhook():
         if not phone:
             return Response('', status=200)
 
+        # Prevent duplicate processing
+        if phone in processing:
+            return Response('', status=200)
+        processing.add(phone)
+
         all_phones.add(phone)
 
         # Get Aurora's response
@@ -536,23 +543,25 @@ def zapi_webhook():
 
     except Exception as e:
         pass
+    finally:
+        processing.discard(phone)
 
     return Response('', status=200)
 
 
 def send_zapi_message(phone, message):
-    """Send a WhatsApp message via Z-API."""
+    """Send a WhatsApp message via Z-API — keep as one message."""
     instance_id = os.environ.get("ZAPI_INSTANCE_ID", "")
     token = os.environ.get("ZAPI_TOKEN", "")
     if not instance_id or not token:
         return
 
-    # Split long messages
+    # Only split if absolutely necessary (over 4000 chars)
     chunks = []
-    while len(message) > 1500:
-        split_at = message.rfind(' ', 0, 1500)
+    while len(message) > 4000:
+        split_at = message.rfind(' ', 0, 4000)
         if split_at == -1:
-            split_at = 1500
+            split_at = 4000
         chunks.append(message[:split_at])
         message = message[split_at:].strip()
     chunks.append(message)
