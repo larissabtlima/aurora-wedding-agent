@@ -1,4 +1,5 @@
 import os
+import sys
 import json
 import re
 from flask import Flask, request, Response
@@ -6,6 +7,7 @@ from twilio.rest import Client
 import anthropic
 import urllib.request
 import urllib.parse
+import urllib.error
 
 app = Flask(__name__)
 
@@ -593,16 +595,27 @@ def send_zapi_message(phone, message):
             headers = {"Content-Type": "application/json"}
             if client_token:
                 headers["Client-Token"] = client_token
+            print(f"Z-API SEND ATTEMPT: url={url} phone={phone} headers={list(headers.keys())}", file=sys.stderr)
             req = urllib.request.Request(
                 url,
                 data=payload,
                 headers=headers,
                 method="POST"
             )
-            urllib.request.urlopen(req, timeout=10)
+            resp = urllib.request.urlopen(req, timeout=10)
+            resp_body = resp.read().decode(errors="replace")
+            print(f"Z-API SEND SUCCESS: status={resp.status} body={resp_body}", file=sys.stderr)
+        except urllib.error.HTTPError as e:
+            # This is the important one: Z-API's error response body has the real reason
+            try:
+                error_body = e.read().decode(errors="replace")
+            except Exception:
+                error_body = "<could not read body>"
+            print(f"Z-API SEND HTTP ERROR: status={e.code} body={error_body}", file=sys.stderr)
+        except urllib.error.URLError as e:
+            print(f"Z-API SEND URL ERROR: reason={e.reason}", file=sys.stderr)
         except Exception as e:
-            import sys
-            print(f"Z-API SEND ERROR: {str(e)}", file=sys.stderr)
+            print(f"Z-API SEND ERROR: {type(e).__name__}: {str(e)}", file=sys.stderr)
 
 
 def handle_broadcast_zapi(message_body, from_phone):
