@@ -492,34 +492,51 @@ def whatsapp_webhook():
 @app.route('/zapi', methods=['POST'])
 def zapi_webhook():
     """Handle incoming messages from Z-API (Brazilian WhatsApp number)."""
+    phone = None
     try:
         data = request.get_json(force=True) or {}
 
-        # Z-API message format
+        # Log raw payload for debugging
+        import sys
+        print(f"Z-API RAW: {json.dumps(data)}", file=sys.stderr)
+
         # Only process incoming messages (not our own sent messages)
         if data.get('fromMe', False):
             return Response('', status=200)
 
-        # Extract message text
+        # Extract message text - handle all Z-API formats
         text = ''
-        msg_type = data.get('type', '')
-        if msg_type == 'ReceivedCallback':
-            text = data.get('text', {}).get('message', '')
-        elif 'text' in data:
-            text = data.get('text', {}).get('message', '') or data.get('text', '')
 
+        # Try nested text object first (most common Z-API format)
+        if isinstance(data.get('text'), dict):
+            text = data['text'].get('message', '')
+        elif isinstance(data.get('text'), str):
+            text = data['text']
+
+        # Try message field directly
         if not text:
-            # Voice message
-            if data.get('audio') or msg_type in ['AudioMessage', 'PTTMessage']:
+            text = data.get('message', '')
+
+        # Try body field
+        if not text:
+            text = data.get('body', '')
+
+        # Voice message handling
+        if not text:
+            if data.get('audio') or data.get('type', '') in ['AudioMessage', 'PTTMessage', 'audio']:
                 text = '[voice message]'
             else:
+                print(f"Z-API: No text found in payload: {data}", file=sys.stderr)
                 return Response('', status=200)
 
-        # Extract phone number
-        phone = data.get('phone', '') or data.get('from', '')
+        # Extract phone number - Z-API sends as "5531982262520" format
+        phone = str(data.get('phone', '') or data.get('from', '') or data.get('senderPhone', ''))
         phone = phone.replace('@s.whatsapp.net', '').replace('whatsapp:', '').strip()
         if not phone:
+            print(f"Z-API: No phone found in payload", file=sys.stderr)
             return Response('', status=200)
+
+        print(f"Z-API: phone={phone} text={text}", file=sys.stderr)
 
         # Prevent duplicate processing
         if phone in processing:
@@ -542,9 +559,11 @@ def zapi_webhook():
         send_zapi_message(phone, reply)
 
     except Exception as e:
-        pass
+        import sys
+        print(f"Z-API ERROR: {str(e)}", file=sys.stderr)
     finally:
-        processing.discard(phone)
+        if phone:
+            processing.discard(phone)
 
     return Response('', status=200)
 
@@ -567,18 +586,23 @@ def send_zapi_message(phone, message):
     chunks.append(message)
 
     url = f"https://api.z-api.io/instances/{instance_id}/token/{token}/send-text"
+    client_token = os.environ.get("ZAPI_CLIENT_TOKEN", "")
     for chunk in chunks:
         try:
             payload = json.dumps({"phone": phone, "message": chunk}).encode()
+            headers = {"Content-Type": "application/json"}
+            if client_token:
+                headers["Client-Token"] = client_token
             req = urllib.request.Request(
                 url,
                 data=payload,
-                headers={"Content-Type": "application/json"},
+                headers=headers,
                 method="POST"
             )
             urllib.request.urlopen(req, timeout=10)
-        except:
-            pass
+        except Exception as e:
+            import sys
+            print(f"Z-API SEND ERROR: {str(e)}", file=sys.stderr)
 
 
 def handle_broadcast_zapi(message_body, from_phone):
