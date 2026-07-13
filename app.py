@@ -391,27 +391,57 @@ def get_aurora_response(phone_number, user_message):
     return assistant_message
 
 
+def clean_whatsapp_formatting(text):
+    """Safety net: convert/strip markdown that WhatsApp doesn't render,
+    so stray ** or # from the model never reach the guest as literal characters."""
+    if not text:
+        return text
+    # **bold** or ***bold*** -> *bold* (WhatsApp's single-asterisk bold)
+    text = re.sub(r'\*{2,3}(.+?)\*{2,3}', r'*\1*', text)
+    # Markdown headers "# Heading" / "## Heading" -> just "*Heading*" (bold), drop the hashes
+    text = re.sub(r'^#{1,6}\s*(.+)$', r'*\1*', text, flags=re.MULTILINE)
+    # Stray leftover hash characters used as bullets (e.g. "# item") already handled above;
+    # catch any remaining isolated # symbols not part of a real heading pattern
+    text = re.sub(r'(?<!\w)#(?!\w)', '', text)
+    return text
+
+
 def get_admin_response(phone_number, user_message):
-    """Handle admin queries with full data access."""
+    """Handle messages from Larissa/Robert. Talks exactly like Aurora talks to
+    any guest — warm, natural, remembers the conversation — but also has full
+    backend data access if they ask an admin-style question (RSVP stats,
+    who hasn't responded, guest list, etc.)."""
+    add_to_conversation(phone_number, "user", user_message)
+    messages = get_conversation(phone_number)
+
+    who = 'Larissa' if '353833' in phone_number else 'Robert'
     stats = get_admin_stats()
-    context = f"""Admin query from {'Larissa' if '353833' in phone_number else 'Robert'}.
 
-Current wedding data:
-{json.dumps(stats, indent=2)}
+    combined_system = SYSTEM_PROMPT + f"""
 
-Admin question: {user_message}"""
+---
+You are talking directly with {who}, one half of the couple getting married — not a random guest.
+Talk to them exactly the way you would with anyone else: warm, natural, normal conversation. Do NOT act like an admin dashboard, do NOT say things like "admin query received," and do NOT dump data unless it's actually asked for.
+
+The only difference: {who} also has access to backend wedding data. If — and only if — they ask something like RSVP stats, who has/hasn't responded, guest list details, or conversation history, answer honestly and specifically using the data below (exact numbers and names). For anything else — wedding questions, chit-chat, planning — respond exactly as you would to any guest.
+
+Backend data (use only if asked for admin-style info):
+{json.dumps(stats, indent=2)}"""
 
     response = anthropic_client.messages.create(
         model="claude-haiku-4-5-20251001",
         max_tokens=1024,
-        system=ADMIN_SYSTEM,
-        messages=[{"role": "user", "content": context}]
+        system=combined_system,
+        messages=messages
     )
-    return response.content[0].text
+    assistant_message = response.content[0].text
+    add_to_conversation(phone_number, "assistant", assistant_message)
+    return assistant_message
 
 
 def send_whatsapp_message(to_number, message, from_number):
     """Send WhatsApp message, splitting if needed."""
+    message = clean_whatsapp_formatting(message)
     chunks = []
     while len(message) > 1500:
         split_at = message.rfind(' ', 0, 1500)
@@ -591,6 +621,8 @@ def send_zapi_message(phone, message):
     token = os.environ.get("ZAPI_TOKEN", "")
     if not instance_id or not token:
         return
+
+    message = clean_whatsapp_formatting(message)
 
     # Only split if absolutely necessary (over 4000 chars)
     chunks = []
