@@ -66,6 +66,8 @@ def _state_dict():
         "guest_flags": guest_flags,
         "active_subject": active_subject,
         "pending_subject": pending_subject,
+        "known_guest_names": KNOWN_GUEST_NAMES,
+        "bridal_party_phones": list(bridal_party_phones),
     }
 
 def save_state():
@@ -94,16 +96,18 @@ def load_state():
             guest_flags = data.get("guest_flags", {})
             active_subject = data.get("active_subject", {})
             pending_subject = data.get("pending_subject", {})
+            for extra_name in data.get("known_guest_names", []):
+                if extra_name not in KNOWN_GUEST_NAMES:
+                    KNOWN_GUEST_NAMES.append(extra_name)
+            bridal_party_phones.update(data.get("bridal_party_phones", []))
             import sys
-            print(f"LOADED STATE: {len(all_phones)} phones, {len(rsvp_data)} rsvps", file=sys.stderr)
+            print(f"LOADED STATE: {len(all_phones)} phones, {len(rsvp_data)} rsvps, {len(KNOWN_GUEST_NAMES)} known guests", file=sys.stderr)
         else:
             import sys
             print("LOADED STATE: no existing data file, starting fresh", file=sys.stderr)
     except Exception as e:
         import sys
         print(f"LOAD STATE ERROR: {str(e)}", file=sys.stderr)
-
-load_state()
 
 ADMIN_NUMBERS = {"+353833986529", "+19292277546", "+393490541017"}
 ADMIN_NUMBERS_NORMALIZED = {n.lstrip("+") for n in ADMIN_NUMBERS}
@@ -173,9 +177,9 @@ KNOWN_GUEST_NAMES = [
 
 def find_known_guest(name_query):
     """Returns the matching guest name from the known list, or None.
-    Handles informal phrasing ("Im Larissa", "eu sou o Robert") by
-    stripping filler words and matching on the remaining name tokens,
-    not just raw substrings."""
+    Handles informal phrasing ("Im Larissa", "eu sou o Robert") and
+    nicknames/short forms ("Rob" -> "Robert Daly") by stripping filler
+    words and matching on name tokens, not just raw substrings."""
     import re
     FILLER_WORDS = {"im", "i'm", "eu", "sou", "meu", "nome", "name", "is", "e", "é", "the", "o", "a"}
     q = name_query.lower().strip()
@@ -186,20 +190,50 @@ def find_known_guest(name_query):
         return None
     q_clean = " ".join(q_tokens)
 
+    # PASS 1: exact match wins immediately, over anyone in the list —
+    # checked across the WHOLE list before any substring/fuzzy fallback.
+    # Otherwise a short exact name like "Leo" could get pre-empted by an
+    # earlier, unrelated longer name that merely CONTAINS "leo" as a
+    # substring (e.g. "Leonardo"), which was a real bug found here.
+    for known in KNOWN_GUEST_NAMES:
+        if known.lower() == q_clean:
+            return known
+
+    # PASS 2: token-aware fuzzy matching as a fallback. Deliberately does
+    # NOT do raw whole-string substring matching (e.g. "ana" is NOT allowed
+    # to match "Diana O'Halloran" just because "ana" happens to appear
+    # inside the letters of "Diana" — that's a coincidental substring, not
+    # a real name relationship, and was a real bug found here).
     best = None
     best_score = 0
     for known in KNOWN_GUEST_NAMES:
         k = known.lower()
         k_tokens = set(re.findall(r"[a-zà-ú']+", k))
-        if k == q_clean or q_clean in k or k in q_clean:
-            return known
-        overlap = len(set(q_tokens) & k_tokens)
+        if q_clean in k_tokens:
+            overlap = 100  # the whole query matches one token exactly
+        else:
+            overlap = len(set(q_tokens) & k_tokens)
+        # Nickname/short-form fallback: e.g. "rob" should match "robert" —
+        # only for tokens 3+ letters, to avoid over-matching on short noise.
+        if overlap == 0:
+            for qt in q_tokens:
+                if len(qt) < 3:
+                    continue
+                for kt in k_tokens:
+                    if len(kt) >= 3 and (kt.startswith(qt) or qt.startswith(kt)):
+                        overlap += 1
+                        break
         if overlap > best_score:
             best_score = overlap
             best = known
     return best if best_score > 0 else None
 
 BRAZIL_NAME_MARKERS = None  # placeholder, Brazilian guest list is matched via the guest list itself
+
+# Must be called here, AFTER KNOWN_GUEST_NAMES and bridal_party_phones are
+# defined above — load_state() populates both from disk, so calling it any
+# earlier would crash with a NameError on startup.
+load_state()
 
 def sanitize_for_whatsapp(text):
     import re
@@ -306,7 +340,6 @@ I can help you with:
 🏨 Where to stay
 👗 What to wear each day
 🍝 Rome restaurants & tips
-🛂 Passport (important! tell me more)
 🚌 Transport between venues
 💰 Budget guide for Rome
 ❓ Any wedding questions
@@ -328,6 +361,7 @@ RSVP PARA OUTRA PESSOA — REGRA CRÍTICA:
 Quem está te mandando mensagem (o número de telefone) NÃO é necessariamente quem está sendo confirmado. Uma pessoa pode confirmar presença dela mesma E de outras pessoas na mesma conversa (ex: Larissa confirmando a própria presença e também a da Anna Laura).
 SEMPRE deixe claro, a cada novo RSVP dentro da mesma conversa, para QUEM é aquele RSVP específico — nunca assuma que é a mesma pessoa do RSVP anterior nessa conversa.
 Quando o nome mudar de convidado dentro da mesma conversa, trate como um RSVP totalmente novo e separado — não misture dados de uma pessoa com a outra.
+⚠️ TELEFONE DO CONVIDADO — SEMPRE PERGUNTAR: quando alguém estiver confirmando a presença de OUTRA pessoa (não a própria), peça o número de telefone dessa pessoa em algum momento do RSVP (ex: "Qual é o telefone da/do [nome], pra eu adicionar na planilha?"). Isso é essencial pra registrar o contato certo na planilha. Se a pessoa não souber o telefone, tudo bem — só avise que pode adicionar depois.
 
 
 LISTA DE CONVIDADOS (249 pessoas):
@@ -344,50 +378,55 @@ Quando perguntarem: "Sua hospedagem já está inclusa! 🏨 Cobrimos as noites d
 RSVP EM GRUPO: Linda Cahill = principal de Conor, Cathy, Ayla, Avean, Caera Cahill. Mossie Mc Donnell = principal de Gaye e Julie. Ofereça confirmar todos juntos.
 
 PERGUNTAS DE RSVP — REGRAS CRÍTICAS:
-- NUNCA faça mais de UMA pergunta por mensagem. Isso é obrigatório.
-- NUNCA repita uma pergunta que já foi feita na conversa.
+- NUNCA faça mais de UMA pergunta por mensagem. Isso é obrigatório. (Única exceção: o passo 1 do RSVP pode juntar a confirmação do nome com o aviso do acompanhante, já que são sobre o mesmo assunto inicial — ver regra ACOMPANHANTE abaixo. Fora essa exceção específica, uma pergunta por vez, sempre.)
+- NUNCA repita uma pergunta que já foi feita na conversa. Se a pessoa já respondeu "sim" a algo, NUNCA pergunte de novo "então confirma que [X]?" — isso é irritante e falha. Uma resposta é suficiente, sempre.
 - NUNCA recomece o fluxo do zero se já está no meio — continue de onde parou.
 - Se a pessoa respondeu algo, registre e passe para a PRÓXIMA pergunta apenas.
 - NUNCA use hífen ou traço "-" para formatar listas. Use emojis, números, ou quebras de linha.
-- REGRA MÁXIMA PRIORIDADE: Se um RSVP está em andamento (já começou mas não chegou na confirmação final), NUNCA mude de assunto ou "esqueça" de terminar, mesmo que a pessoa pergunte outra coisa no meio. Se a pessoa perguntar algo não relacionado no meio do RSVP, responda brevemente e IMEDIATAMENTE volte para a próxima pergunta do RSVP: "Ah, e voltando ao seu RSVP — [próxima pergunta]". Um RSVP só termina quando chega na mensagem de confirmação final (passo 8) — nunca deixe pela metade.
+- REGRA MÁXIMA PRIORIDADE: Se um RSVP está em andamento (já começou mas não chegou na confirmação final), NUNCA mude de assunto ou "esqueça" de terminar, mesmo que a pessoa pergunte outra coisa no meio. Se a pessoa perguntar algo não relacionado no meio do RSVP, responda brevemente e IMEDIATAMENTE volte para a próxima pergunta do RSVP: "Ah, e voltando ao seu RSVP — [próxima pergunta]". Um RSVP só termina quando chega na mensagem de confirmação final (a etapa "confirmar tudo") — nunca deixe pela metade.
+- NUNCA afirme que alguém "já está confirmado" a menos que essa pessoa tenha genuinamente completado o RSVP nesta conversa (attending=yes registrado). Se não tiver certeza se alguém já confirmou, diga "não tenho certeza se [nome] já confirmou — quer que eu comece o RSVP dele(a) agora?" em vez de assumir. Isso vale especialmente para o Robert e a Larissa — eles só estão confirmados quando o RSVP deles foi de fato preenchido, não só porque são os noivos.
 
 CONFIRMAÇÃO DE NOME — REGRA CRÍTICA:
-Ao confirmar quem é o convidado, SEMPRE use o NOME COMPLETO exatamente como está na lista de convidados (ex: "Larissa Daly", nunca só "Larissa"). O nome completo é usado para organizar os lugares na recepção — é essencial. NUNCA confirme ou registre apenas o primeiro nome.
+Ao confirmar quem é o convidado, SEMPRE use o NOME COMPLETO exatamente como está na lista de convidados, em **negrito** (ex: "**Larissa Daly**", nunca só "Larissa"). O nome completo é usado para organizar os lugares na recepção — é essencial. NUNCA confirme ou registre apenas o primeiro nome.
 
 ACOMPANHANTE (+1) — REGRA CRÍTICA:
+Assim que identificar quem é o convidado (logo no início do RSVP, antes até da pergunta "vai comparecer?"), verifique se essa pessoa tem um acompanhante listado. Se tiver, avise IMEDIATAMENTE e de forma proativa: "Vi aqui que você tem um acompanhante — **[nome do acompanhante]**! Quer confirmar a presença dele(a) também agora, ou prefere fazer isso depois, separadamente?" Nunca espere a pessoa perguntar "eu tenho +1?" — isso deveria vir de Aurora.
+Se a pessoa disser "depois", tudo bem — o RSVP principal continua normalmente sem travar nisso, e o acompanhante pode ser confirmado em qualquer conversa futura.
 NUNCA ofereça ou pergunte sobre acompanhante para quem não tem um listado claramente na lista (marcado como "acompanhante de", "Guest", ou nome próprio ao lado). Se a pessoa NÃO tem acompanhante listado, não toque nesse assunto.
-Se mesmo assim a pessoa pedir um acompanhante, diga algo como: "Essa pessoa não está na nossa lista no momento, mas vou perguntar para a Larissa e te aviso, tá? 💕" — e não prometa nada além disso.
+Se mesmo assim a pessoa pedir um acompanhante que não está na lista, diga algo como: "Essa pessoa não está na nossa lista no momento, mas vou perguntar para a Larissa e te aviso, tá? 💕" — e não prometa nada além disso.
 
-DIAS DO EVENTO — SEMPRE EMPOLGANTE (texto sugerido, adapte ao idioma do convidado):
-Ao perguntar quais dias a pessoa vai, conte o programa completo de forma animada ANTES de perguntar, tipo:
+DIAS DO EVENTO — OBRIGATÓRIO SER EMPOLGANTE, SEM EXCEÇÃO:
+Isso não é opcional nem uma sugestão — TODA VEZ que perguntar quais dias a pessoa vai comparecer, é OBRIGATÓRIO contar o programa completo de forma animada ANTES de perguntar. Nunca pergunte só "vai nos 3 dias?" secamente. Use sempre esta estrutura (adapte o idioma, mas mantenha o conteúdo e o entusiasmo):
 "Vai ser incrível! 🎉 Aqui está nosso programa:
 🍷 Dia 1 (24/06): Vamos passar a tarde numa vinícola linda perto de Roma — aula de culinária, degustação de vinhos, tudo ao ar livre!
 💍 Dia 2 (25/06): O grande dia! Cerimônia às 15h numa basílica histórica no coração de Roma, seguida de recepção incrível numa villa com vista pra cidade.
 🍺 Dia 3 (26/06): Dia de relaxar juntos num pub irlandês, com boa comida e bebida — perfeito pra recuperar do dia anterior!
 Você vai nos três dias, ou só em alguns?"
+Isso vale sempre — inclusive quando a MESMA conversa tem RSVPs de PESSOAS DIFERENTES (ex: Larissa confirmando ela mesma e depois a Anna): cada nova pessoa recebe o texto animado completo de novo, já que é a primeira vez que ELA está ouvindo. Isso não conta como "repetir uma pergunta" (essa regra é sobre não perguntar a MESMA coisa duas vezes pra MESMA pessoa).
 
 RESTRIÇÕES ALIMENTARES:
 Ao perguntar, SEMPRE liste todas as opções: vegetariano, vegano, alergia a nozes, não come carne vermelha, não come porco, alergia a frutos do mar, ou nenhuma restrição.
 
 ELEVADOR NA IGREJA — REGRA CRÍTICA:
-O elevador é reservado APENAS para quem realmente tem dificuldade de mobilidade, está grávida, ou tem crianças pequenas de colo. Deixe isso bem claro ao perguntar — o esperado é que a maioria suba as escadas normalmente. NÃO ofereça o elevador como opção padrão, senão todo mundo vai pedir por preguiça.
+Pergunte de forma neutra, sem assumir que a pessoa já sabe do assunto — sempre explique rapidinho antes de perguntar, tipo: "Uma coisa sobre a cerimônia: são 124 degraus pra subir na basílica. Tem elevador disponível pra quem realmente precisa (mobilidade reduzida, gravidez, crianças de colo). Você vai precisar do elevador ou consegue subir as escadas numa boa?"
+O elevador é reservado APENAS para quem realmente tem dificuldade de mobilidade, está grávida, ou tem crianças pequenas de colo — mas pergunte de forma acolhedora, não como se fosse óbvio ou repetitivo.
 
 PASSAPORTE — REGRA CRÍTICA DE IDIOMA:
-SÓ ofereça ajuda com passaporte se a conversa estiver em PORTUGUÊS. NUNCA ofereça ou mencione ajuda com passaporte para convidados falando em inglês — esse suporte é exclusivo para convidados brasileiros que precisam tirar passaporte para viajar. Se a conversa é em português E a pessoa está na LISTA DA LARISSA (ou claramente é brasileira), ofereça no passo 7 do RSVP.
+SÓ ofereça ajuda com passaporte se a conversa estiver em PORTUGUÊS. NUNCA ofereça ou mencione ajuda com passaporte para convidados falando em inglês — esse suporte é exclusivo para convidados brasileiros que precisam tirar passaporte para viajar. Se a conversa é em português E a pessoa está na LISTA DA LARISSA (ou claramente é brasileira), ofereça na etapa de passaporte do RSVP (ver ORDEM DO RSVP abaixo).
 
 ORDEM DO RSVP (uma pergunta por vez):
-1. Verificação do nome → confirmar o NOME COMPLETO exatamente como na lista
+1. Verificação do nome → confirmar o NOME COMPLETO exatamente como na lista, em negrito. Se a pessoa tem acompanhante listado, avisar aqui (ver regra ACOMPANHANTE acima).
 2. Vai comparecer?
-3. Quais dias? (use o texto animado acima antes de perguntar)
-4. Acompanhante? (SÓ perguntar se a pessoa TEM um acompanhante listado)
-5. Restrições alimentares? (listar todas as opções)
-6. Elevador na igreja? (deixar claro que é só para quem realmente precisa)
-7. [Só se em português E brasileiro] Ajuda com passaporte?
-8. Confirmar tudo em UMA mensagem acolhedora, usando o NOME COMPLETO — este é o passo final, o RSVP só está completo depois desta mensagem
-9. Logo após confirmar, SEMPRE enviar um checklist do que falta resolver: 🛂 Passaporte (se brasileiro), 🏨 Hospedagem, ✈️ Voos — perguntando o status de cada item e oferecendo ajuda com o próximo passo.
+3. Quais dias? (SEMPRE usar o texto animado obrigatório acima antes de perguntar)
+4. Restrições alimentares? (listar todas as opções)
+5. Elevador na igreja? (explicar antes de perguntar, tom acolhedor)
+6. [Só se em português E brasileiro] Ajuda com passaporte?
+7. Confirmar tudo em UMA mensagem acolhedora, usando o NOME COMPLETO — este é o passo final, o RSVP só está completo depois desta mensagem
+8. Logo após confirmar, SEMPRE enviar um checklist do que falta resolver: 🛂 Passaporte (se brasileiro), 🏨 Hospedagem, ✈️ Voos — perguntando o status de cada item e oferecendo ajuda com o próximo passo.
 
 NUNCA confirme presença de quem não está na lista → alerte Larissa imediatamente.
 LEMBRETES INTELIGENTES: não repita o que já foi confirmado.
+
 SAUDAÇÕES VIP:
 Larissa Daly (Noiva): "Meu Deus, é a NOIVA! 👰 Larissa, estamos tão animados!..."
 Robert Daly (Noivo): "O homem da hora! 🤵..."
@@ -649,8 +688,8 @@ REGRAS AURORA:
 9. Lembretes inteligentes — não repetir o que já foi confirmado
 10. Nunca 100% de certeza se houver dúvida
 11. Cada RSVP pertence a UMA pessoa específica — nunca misturar dados de convidados diferentes na mesma conversa
-12. VOOS: Usar as referências de voos acima como ponto de partida. Sempre avisar que os preços flutuam e sugerir links diretos: Google Flights (google.com/flights), Skyscanner (skyscanner.com.br), e site da ITA Airways (itaspa.com) para pesquisar preços ao vivo. Oferecer AMBAS as opções de roteiro (só casamento E casamento + extensão) para convidados brasileiros.
-13. SUL DA ITÁLIA: Só mencionar se o convidado perguntar sobre o que fazer após o casamento. Nunca impor. Apresentar como sugestão leve e sempre mencionar que a Costa Amalfitana é cara."""
+12. VOOS: Usar as referências de voos acima como ponto de partida. Sempre avisar que os preços flutuam e sugerir links diretos: Google Flights (google.com/flights), Skyscanner (skyscanner.com.br), e site da ITA Airways (itaspa.com) para pesquisar preços ao vivo. NÃO oferecer proativamente uma extensão para o sul da Itália — só mencionar se perguntarem sobre ficar mais tempo (ver regra 13).
+13. SUL DA ITÁLIA: Só mencionar se o convidado perguntar sobre o que fazer após o casamento. Nunca impor, nunca oferecer como parte de um pacote padrão. Apresentar como sugestão leve e sempre mencionar que a Costa Amalfitana é cara."""
 
 ADMIN_SYSTEM = """Você é a interface administrativa da Aurora para Larissa, Robert e Carlotta.
 
@@ -695,31 +734,40 @@ def add_to_conversation(phone_number, role, content):
 def detect_subject_change(phone, assistant_text, user_message):
     """
     Figures out WHO the current RSVP is for on this phone, separate from
-    whose phone number is texting. Looks for Aurora's own confirmation
-    line ("Só para confirmar — você é **NAME**...") and, once the guest
-    replies affirmatively, locks that name in as the active subject.
+    whose phone number is texting.
 
-    CRITICAL: the captured text is always resolved against the real guest
-    list before being accepted. Otherwise informal phrasing (e.g. a guest
-    typing "Im Larissa" and Aurora echoing that back) gets saved verbatim
-    as the "name" — which then matches no row in the spreadsheet at all,
-    so the RSVP silently never appears there despite everything reporting
-    success.
+    Works by scanning Aurora's reply for ANY **bolded** text that resolves
+    to a real guest name — not one fixed sentence template. This matters
+    because Aurora phrases identity confirmations differently every time,
+    in both Portuguese and English ("você é **X**", "is this **X**?",
+    "vou confirmar a presença de **X**", etc.) — a single regex pattern
+    for one exact phrasing missed almost all of them, which was the root
+    cause of RSVPs silently getting attributed to the wrong person.
     """
     import re
-    match = re.search(r"voc[eê] [eé]\s+\*\*(.+?)\*\*", assistant_text, re.IGNORECASE)
-    if match:
-        raw_name = match.group(1).strip()
-        resolved = find_known_guest(raw_name)
-        if resolved:
-            pending_subject[phone] = resolved
-        else:
-            pending_subject[phone] = raw_name
-            import sys
-            print(f"SUBJECT WARNING: '{raw_name}' did not resolve to a known guest — saving as-is, may not match spreadsheet", file=sys.stderr)
-        return
+    # Only consider this a subject-confirmation candidate if Aurora is
+    # actually asking something (contains "?") — otherwise a name merely
+    # mentioned in passing (e.g. "Fabiano's +1 is **Jhenifer Bering**")
+    # would wrongly get treated as a pending identity switch.
+    if "?" in assistant_text:
+        bolded = re.findall(r"\*\*(.+?)\*\*", assistant_text)
+        resolved_names = []
+        for b in bolded:
+            match = find_known_guest(b.strip())
+            if match and match not in resolved_names:
+                resolved_names.append(match)
+        if len(resolved_names) == 1:
+            pending_subject[phone] = resolved_names[0]
+            return
 
     lower_user = user_message.lower().strip()
+    # A clear "no" clears any pending candidate so it can't resurface and
+    # get wrongly promoted by an unrelated "yes" later in the conversation.
+    negative = lower_user in ("não", "nao", "no", "não.", "nao.", "no.") or lower_user.startswith(("não,", "nao,", "no,"))
+    if negative and phone in pending_subject:
+        pending_subject.pop(phone, None)
+        return
+
     affirmative = any(w in lower_user for w in ["sim", "yes", "isso", "correto", "certo", "exato"])
     if affirmative and phone in pending_subject:
         new_name = pending_subject.pop(phone)
@@ -751,7 +799,7 @@ def extract_rsvp_from_response(phone, response_text, user_message):
     if key not in guest_flags:
         guest_flags[key] = {}
 
-    if any(w in lower for w in ["yes", "attending", "sim", "vou", "certeza", "confirmado", "presença confirmada", "vou comparecer"]):
+    if any(w in lower for w in ["yes", "sim", "vou comparecer", "vou sim", "com certeza que vou", "presença confirmada", "confirmo minha presença", "confirmo a presença"]):
         if not any(w in lower for w in ["not attending", "não vou", "unable", "não poderei", "não consigo", "infelizmente não"]):
             rsvp_data[key]["attending"] = "yes"
             guest_flags[key]["rsvp_done"] = True
@@ -798,14 +846,14 @@ def extract_rsvp_from_response(phone, response_text, user_message):
     rsvp_data[key]["dietary"] = ", ".join(dietary_items) if dietary_items else "nenhuma"
 
     days = list(rsvp_data[key].get("days", []))
-    if any(w in lower for w in ["all three", "all 3", "os três", "todos os dias", "os 3", "tudo"]):
+    if any(w in lower for w in ["all three", "all 3", "os três", "todos os dias", "os 3 dias", "nos 3 dias"]):
         days = ["all"]
     else:
-        if any(w in lower for w in ["day 1", "dia 1", "24", "winery", "vinícola"]) and "day1" not in days:
+        if any(w in lower for w in ["day 1", "dia 1", "24/06", "24 de junho", "winery", "vinícola"]) and "day1" not in days:
             days.append("day1")
-        if any(w in lower for w in ["day 2", "dia 2", "25", "wedding", "casamento", "cerimônia"]) and "day2" not in days:
+        if any(w in lower for w in ["day 2", "dia 2", "25/06", "25 de junho", "wedding", "casamento", "cerimônia"]) and "day2" not in days:
             days.append("day2")
-        if any(w in lower for w in ["day 3", "dia 3", "26", "pub", "scholars"]) and "day3" not in days:
+        if any(w in lower for w in ["day 3", "dia 3", "26/06", "26 de junho", "pub", "scholars"]) and "day3" not in days:
             days.append("day3")
     if days:
         rsvp_data[key]["days"] = days
@@ -843,7 +891,21 @@ def get_aurora_response(phone_number, user_message):
                 break
 
     extract_rsvp_from_response(phone_number, assistant_message, user_message)
-    log_to_sheets("phone", {"phone": phone_number, "name": phone_registry.get(phone_number, "")})
+
+    subject_name = active_subject.get(phone_number)
+    sender_name = phone_registry.get(phone_number)
+    if subject_name and subject_name == sender_name:
+        # The sender is RSVPing for themselves — safe to log their own phone.
+        log_to_sheets("phone", {"phone": phone_number, "name": sender_name})
+    elif subject_name and subject_name != sender_name:
+        # RSVPing on behalf of someone else — only log a phone number for
+        # THAT person if one was actually given in this message, never the
+        # sender's own number (that would overwrite the wrong guest's row).
+        import re as _re_phone
+        phone_match = _re_phone.search(r'(\+?\d[\d\s\-\(\)]{7,}\d)', user_message)
+        if phone_match:
+            target_phone = _re_phone.sub(r'[\s\-\(\)]', '', phone_match.group(1))
+            log_to_sheets("phone", {"phone": target_phone, "name": subject_name})
     save_state()
 
     lower_response = assistant_message.lower()
@@ -878,21 +940,45 @@ ADMIN_IDENTITY = {
     "393490541017": "Carlotta"
 }
 
-PERSONAL_RSVP_KEYWORDS = [
-    "quero rsvp", "quero confirmar", "sou convidad", "meu rsvp",
-    "confirmar minha presença", "confirmar minha presenca",
-    "i want to rsvp", "i'm also a guest", "im also a guest", "my own rsvp"
-]
+RSVP_INTENT_KEYWORDS = ["rsvp", "confirmar presença", "confirmar a presença",
+                        "quero confirmar", "confirm the attendance", "quero rsvp", "i want to rsvp"]
+SELF_REFERENCE_WORDS = ["minha presença", "minha presenca", "myself", "eu mesma", "eu mesmo",
+                        "my own", "meu rsvp", "sou convidad", "i'm also a guest", "im also a guest"]
 
-def wants_personal_rsvp(text):
+def resolve_rsvp_intent(text, admin_own_name):
+    """Figures out, unambiguously, whether an RSVP-intent message is about
+    the admin themselves or about someone else — and if someone else, who.
+    Replaces the old approach of two separate keyword lists that could
+    collide on overlapping phrases like "quero confirmar" (which matched
+    both 'personal RSVP' and 'RSVP for someone else', causing whichever
+    check ran first to silently swallow the other's intent).
+    Returns ("self", None) | ("other", resolved_name) | ("ambiguous", None) | (None, None) if no RSVP intent at all.
+    """
     lower = text.lower()
-    return any(k in lower for k in PERSONAL_RSVP_KEYWORDS)
+    matched_keyword = next((k for k in RSVP_INTENT_KEYWORDS if k in lower), None)
+    if not matched_keyword:
+        return (None, None)
+
+    candidate = extract_capitalized_name(text, after_keyword=matched_keyword)
+    resolved = find_known_guest(candidate) if candidate else None
+
+    if resolved and resolved.lower() != admin_own_name.lower():
+        return ("other", resolved)
+    if resolved and resolved.lower() == admin_own_name.lower():
+        return ("self", None)
+    if any(w in lower for w in SELF_REFERENCE_WORDS):
+        return ("self", None)
+    if candidate:
+        # Got a name-like word but it didn't resolve to any known guest —
+        # still treat as "other" using the raw text, rather than silently
+        # falling back to a personal RSVP that wasn't asked for.
+        return ("other", candidate)
+    return ("ambiguous", None)
 
 ADD_GUEST_KEYWORDS = ["adicionar", "adiciona", "add guest", "add to the list", "add to list",
                        "colocar na lista", "incluir na lista", "esquecemos", "we forgot"]
 CHECK_GUEST_KEYWORDS = ["está na lista", "esta na lista", "tá na lista", "ta na lista",
                          "is on the list", "is she on", "is he on", "procurar convidado"]
-RSVP_OTHER_KEYWORDS = ["rsvp"]
 RESET_KEYWORDS = ["[reset]", "resetar tudo", "reset everything", "apagar tudo teste"]
 
 import re as _re
@@ -909,36 +995,71 @@ def extract_name_after_keyword(text, keywords):
                 return remainder
     return None
 
-def extract_capitalized_name(text):
-    match = _re.search(r'\b([A-ZÀ-Ú][a-zà-ú\'\-]+(?:\s+[A-ZÀ-Ú][a-zà-ú\'\-]+){1,3})\b', text)
-    return match.group(1).strip() if match else None
+NON_NAME_WORDS = {
+    "eu", "quero", "não", "nao", "sim", "vou", "meu", "minha", "por", "favor",
+    "the", "i", "want", "to", "for", "please", "yes", "no", "is", "and", "com",
+    "para", "que", "essa", "esse", "ela", "ele", "ela", "you", "your", "rsvp",
+    "confirmar", "confirmo", "confirm", "presença", "presenca", "attendance",
+    "the", "a", "o", "de", "do", "da", "no", "na",
+}
+
+def extract_capitalized_name(text, after_keyword=None):
+    """Finds a capitalized name-like phrase in text. If after_keyword is
+    given, only searches the text AFTER that keyword's position (so "RSVP
+    Anna" correctly finds "Anna" instead of grabbing a capitalized sentence-
+    starter word like "Eu" or "Quero" earlier in the message). Filters out
+    common non-name words either way."""
+    search_text = text
+    if after_keyword:
+        idx = text.lower().find(after_keyword.lower())
+        if idx != -1:
+            search_text = text[idx + len(after_keyword):]
+    candidates = _re.findall(r'\b([A-ZÀ-Ú][a-zà-ú\'\-]+(?:\s+[A-ZÀ-Ú][a-zà-ú\'\-]+){0,3})\b', search_text)
+    for c in candidates:
+        if c.strip().lower() not in NON_NAME_WORDS:
+            return c.strip()
+    # Fall back to searching the whole text if nothing after the keyword worked
+    if after_keyword:
+        all_candidates = _re.findall(r'\b([A-ZÀ-Ú][a-zà-ú\'\-]+(?:\s+[A-ZÀ-Ú][a-zà-ú\'\-]+){0,3})\b', text)
+        for c in all_candidates:
+            if c.strip().lower() not in NON_NAME_WORDS:
+                return c.strip()
+    return None
 
 ADMIN_QUERY_KEYWORDS = [
-    # stats / reports
-    "quantas confirmações", "quantos rsvp", "quem confirmou", "quem não confirmou",
-    "lista de convidados", "guest list", "who rsvped", "how many confirmed",
-    "status do casamento", "wedding status", "relatório", "report", "resumo",
-    "quem está na lista", "who is on the list",
-    # broadcast
-    "[all]", "[bridal]",
-    # reset
-    "[reset]", "resetar tudo", "reset everything",
+    # exact phrases that are unambiguous
+    "[all]", "[bridal]", "[reset]", "resetar tudo", "reset everything",
 ]
+
+# Word-based detection: a message counts as an admin stats query if it
+# contains a "who/how many" word AND a "confirmed/RSVP/list" word together
+# — this catches natural rephrasing ("quem mais está confirmado", "quero a
+# lista de quem rsvp") that exact-phrase matching kept missing.
+ADMIN_QUERY_SUBJECT_WORDS = ["quem", "who", "quantos", "quantas", "how many", "quanta"]
+ADMIN_QUERY_TOPIC_WORDS = ["confirm", "rsvp", "lista", "list", "status", "relatório", "report", "resumo", "presença"]
+
+def is_admin_stats_query(text):
+    lower = text.lower()
+    if any(k in lower for k in ADMIN_QUERY_KEYWORDS):
+        return True
+    has_subject = any(w in lower for w in ADMIN_QUERY_SUBJECT_WORDS)
+    has_topic = any(w in lower for w in ADMIN_QUERY_TOPIC_WORDS)
+    return has_subject and has_topic
 
 def is_admin_query(text):
     """Returns True only if the message is clearly an admin/management query,
     not a general wedding info question that Aurora can answer normally."""
     lower = text.lower()
     # Explicit admin keywords
-    if any(k in lower for k in ADMIN_QUERY_KEYWORDS):
+    if is_admin_stats_query(text):
         return True
-    # Guest list management
     if any(k in lower for k in ADD_GUEST_KEYWORDS):
         return True
     if any(k in lower for k in CHECK_GUEST_KEYWORDS):
         return True
     # RSVP on behalf of someone else (not personal)
-    if any(k in lower for k in RSVP_OTHER_KEYWORDS) and not wants_personal_rsvp(text):
+    intent, _ = resolve_rsvp_intent(text, "")
+    if intent in ("other", "ambiguous"):
         return True
     return False
 
@@ -948,10 +1069,13 @@ def get_admin_response(phone_number, user_message):
     lower_msg = user_message.lower()
 
     # --- Reset everything (only useful before invitations go out) ---
+    # Note: KNOWN_GUEST_NAMES additions are NOT cleared here — those are
+    # deliberate guest-list edits (someone added via "adicionar"), not
+    # test conversation noise, so they should survive a reset.
     if any(k in lower_msg for k in RESET_KEYWORDS):
         conversations.clear(); admin_conversations.clear(); rsvp_data.clear()
         guest_flags.clear(); active_subject.clear(); pending_subject.clear()
-        phone_registry.clear(); all_phones.clear()
+        phone_registry.clear(); all_phones.clear(); bridal_party_phones.clear()
         save_state()
         return "🔄 Tudo resetado! Conversas, RSVPs e dados de teste foram apagados. Pronto para recomeçar."
 
@@ -978,31 +1102,12 @@ def get_admin_response(phone_number, user_message):
             return f"Não encontrei *{candidate}* na lista. Quer que eu adicione? É só dizer 'adicionar {candidate}'."
         return "Qual é o nome que você quer verificar?"
 
-    # --- RSVP on behalf of another guest ---
-    if any(k in lower_msg for k in RSVP_OTHER_KEYWORDS) and not wants_personal_rsvp(user_message):
-        candidate = extract_capitalized_name(user_message)
-        if candidate:
-            target = find_known_guest(candidate) or candidate
-            active_subject[phone_number] = target
-            conversations[phone_number] = [
-                {"role": "user", "content": f"[sistema: RSVP sendo feito por {name} em nome de {target}, já identificado, não precisa perguntar o nome]"},
-                {"role": "assistant", "content": f"Perfeito! Vamos registrar a presença de *{target}*! 💕 Só para confirmar — é a grafia certa do nome?"}
-            ]
-            return get_aurora_response(phone_number, user_message)
-
-    # --- Personal RSVP for the admin ---
-    if wants_personal_rsvp(user_message):
-        active_subject[phone_number] = name
-        phone_registry.setdefault(phone_number, name)
-        if not conversations.get(phone_number):
-            conversations[phone_number] = [
-                {"role": "user", "content": f"[sistema: esta conversa é com {name}, já identificado, não precisa perguntar o nome]"},
-                {"role": "assistant", "content": f"Perfeito! Vamos lá então! 💕 Só para confirmar — você é **{name}** da nossa lista, certo?"}
-            ]
-        return get_aurora_response(phone_number, user_message)
-
-    # --- Admin stats/analytics queries ---
-    if any(k in lower_msg for k in ADMIN_QUERY_KEYWORDS):
+    # --- Admin stats/analytics queries — checked BEFORE the RSVP-intent
+    # block below, because a stats question can incidentally contain the
+    # word "rsvp" (e.g. "quero a lista de quem RSVP") and would otherwise
+    # get wrongly treated as an attempt to start a new RSVP. An unambiguous
+    # "who/how many" stats question always wins first. ---
+    if is_admin_stats_query(user_message):
         if phone_number not in admin_conversations:
             admin_conversations[phone_number] = []
         history = admin_conversations[phone_number]
@@ -1022,6 +1127,31 @@ def get_admin_response(phone_number, user_message):
             admin_conversations[phone_number] = history[-20:]
         save_state()
         return reply
+
+    # --- RSVP intent: figure out unambiguously if it's for the admin
+    # themselves, for someone else (and who), or too ambiguous to guess ---
+    intent, target = resolve_rsvp_intent(user_message, name)
+
+    if intent == "other":
+        active_subject[phone_number] = target
+        conversations[phone_number] = [
+            {"role": "user", "content": f"[sistema: RSVP sendo feito por {name} em nome de {target}, já identificado, não precisa perguntar o nome. Pergunte o telefone dessa pessoa em algum momento do RSVP.]"},
+            {"role": "assistant", "content": f"Perfeito! Vamos registrar a presença de **{target}**! 💕 Só para confirmar — é a grafia certa do nome?"}
+        ]
+        return get_aurora_response(phone_number, user_message)
+
+    if intent == "self":
+        active_subject[phone_number] = name
+        phone_registry.setdefault(phone_number, name)
+        if not conversations.get(phone_number):
+            conversations[phone_number] = [
+                {"role": "user", "content": f"[sistema: esta conversa é com {name}, já identificado, não precisa perguntar o nome]"},
+                {"role": "assistant", "content": f"Perfeito! Vamos lá então! 💕 Só para confirmar — você é **{name}** da nossa lista, certo?"}
+            ]
+        return get_aurora_response(phone_number, user_message)
+
+    if intent == "ambiguous":
+        return "Claro! 😊 Confirmar a presença de quem? Pode ser sua ou de outro convidado — é só me falar o nome."
 
     # --- DEFAULT: treat admin as a normal guest for all other questions ---
     # (flights, money, Rome tips, dress code, hotels, etc.)
@@ -1144,17 +1274,17 @@ def zapi_webhook():
         print(f"Z-API: phone={phone} text={text}", file=sys.stderr)
 
         if phone in processing:
-            print(f"Z-API: phone {phone} already processing — skipping", file=sys.stderr)
-            return Response('', status=200)
-
-        now = datetime.datetime.utcnow().timestamp()
-        last_time = last_processed_time.get(phone, 0)
-        if now - last_time < 3:
-            print(f"Z-API: phone {phone} in cooldown ({now - last_time:.1f}s) — skipping", file=sys.stderr)
-            return Response('', status=200)
+            import time
+            print(f"Z-API: phone {phone} busy — waiting briefly instead of dropping", file=sys.stderr)
+            for _ in range(20):  # wait up to ~10s for the in-flight message to finish
+                time.sleep(0.5)
+                if phone not in processing:
+                    break
+            else:
+                print(f"Z-API: phone {phone} still busy after wait — skipping to avoid overlap", file=sys.stderr)
+                return Response('', status=200)
 
         processing.add(phone)
-        last_processed_time[phone] = now
         all_phones.add(phone)
 
         upper_msg = text.upper()
