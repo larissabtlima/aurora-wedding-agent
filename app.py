@@ -22,12 +22,14 @@ phone_registry = {}   # phone -> guest name
 rsvp_data = {}        # phone -> rsvp details
 all_phones = set()
 processing = set()
+processed_message_ids = set()  # track Z-API message IDs to prevent duplicates
 guest_flags = {}      # phone -> dict of flags (flights_booked, passport_done, accommodation_booked, rsvp_done)
 
 # ── ADMIN NUMBERS ──
-ADMIN_NUMBERS = {"+353833986529", "+19292277546"}
+ADMIN_NUMBERS = {"+353833986529", "+19292277546", "+393490541017"}
 LARISSA_NUMBER = "+353833986529"
 ROB_NUMBER = "+19292277546"
+CARLOTTA_NUMBER = "+393490541017"
 
 # ── SPREADSHEET ──
 SPREADSHEET_ID = "1__SAxw3AMWy8Rb3LlRNzfw1MMIJ__4jc7PYpJ5RVDwk"
@@ -43,6 +45,18 @@ BRIDAL_PARTY_NAMES = {
 }
 
 # ── GOOGLE SHEETS LOGGING ──
+def sanitize_for_whatsapp(text):
+    """Convert markdown to WhatsApp format and fix common issues."""
+    import re
+    # Convert **bold** to *bold* (WhatsApp uses single asterisk)
+    text = re.sub(r'\*\*(.+?)\*\*', r'*\1*', text)
+    # Remove markdown headers
+    text = re.sub(r'#{1,6}\s+', '', text)
+    # Remove markdown horizontal rules
+    text = re.sub(r'^[-*_]{3,}$', '', text, flags=re.MULTILINE)
+    return text.strip()
+
+
 def log_to_sheets(data_type, data):
     webhook_url = os.environ.get("SHEETS_WEBHOOK_URL", "")
     if not webhook_url:
@@ -267,11 +281,12 @@ Local: Cantina Santa Benedetta — a vinícola mais antiga da região de Castell
 Endereço: Via Frascati Colonna 35, Monte Porzio Catone, Roma
 Google Maps: https://maps.google.com/?q=Cantina+Santa+Benedetta+Monte+Porzio+Catone
 Site: https://en.santabenedetta.it
-Descrição: Uma tarde inesquecível numa vinícola de família com mais de 300 anos de história, nos arredores de Roma. Inclui aula de culinária (fazemos massa na mão!), degustação de vinhos com sommelier e almoço/jantar harmonizado. Parte da experiência é ao ar livre, com vistas lindas do campo italiano.
-Transporte: Fornecido pelos noivos. O ponto de encontro será informado mais perto da data.
+Descrição: Uma visita especial a uma vinícola de família com mais de 300 anos de história, nos arredores de Roma. Vai ter aula de culinária (fazemos massa na mão!) e degustação de vinhos. Parte da experiência é ao ar livre, com vistas lindas do campo italiano.
+Transporte: Fornecido pelos noivos para os dias 1 e 2. O ponto de encontro para o Dia 1 será informado mais perto da data.
 Distância: Aproximadamente 40 minutos de Roma de carro.
 Traje: Smart casual — elegante mas confortável. Use sapatos confortáveis pois parte é ao ar livre no campo.
 Dica: Faz muito calor em junho (28-35°C / 82-95°F). Use protetor solar e roupas leves!
+IMPORTANTE: Não invente detalhes sobre o programa do Dia 1 além do que está aqui. Não mencione "jantar harmonizado", menu específico, ou qualquer outra atividade que não esteja descrita acima. Se perguntarem detalhes que você não tem, diga que mais informações serão enviadas mais perto da data.
 
 DIA 2 — SEXTA 25 DE JUNHO: O CASAMENTO 💍
 CERIMÔNIA: Basílica di Santa Maria in Aracoeli | 15h00
@@ -299,7 +314,10 @@ Dia 2 (Casamento): Black tie / Traje a rigor — "Dress to impress!" É o grande
 Dia 3 (Pub): Casual total — venha como quiser!
 
 TRANSPORTE:
-Mini-ônibus fornecidos pelos noivos no dia 25/06, saindo da região da Igreja Aracoeli. Levam até a cerimônia, depois para a Villa Miani, e trazem de volta no final. Os horários serão enviados mais perto da data por aqui — salve esse número!
+Os noivos estão fornecendo transporte para os dias 1 e 2:
+- Dia 1 (24/06 — Vinícola): Transporte fornecido. O ponto de encontro será informado mais perto da data.
+- Dia 2 (25/06 — Casamento): Mini-ônibus saindo da região da Igreja Aracoeli. Levam à cerimônia, depois para a Villa Miani, e trazem de volta no final.
+Os horários exatos serão enviados mais perto da data por aqui — salve esse número!
 
 ONDE SE HOSPEDAR:
 Recomendamos ficar na região próxima à Igreja Aracoeli e ao Scholars Lounge Pub — é a área mais conveniente para todos os eventos.
@@ -510,24 +528,57 @@ def extract_rsvp_from_response(phone, response_text, user_message):
     if phone not in guest_flags:
         guest_flags[phone] = {}
 
-    if any(w in lower for w in ["yes", "attending", "definitely", "sim", "vou", "certeza", "confirmado", "presença confirmada"]):
-        if not any(w in lower for w in ["not attending", "não vou", "unable", "não poderei", "não consigo"]):
+    # ── ATTENDING STATUS ──
+    if any(w in lower for w in ["yes", "attending", "definitely", "sim", "vou", "certeza", "confirmado", "presença confirmada", "vou comparecer", "vou estar"]):
+        if not any(w in lower for w in ["not attending", "não vou", "unable", "não poderei", "não consigo", "infelizmente não"]):
             rsvp_data[phone]["attending"] = "yes"
             guest_flags[phone]["rsvp_done"] = True
 
-    if any(w in lower for w in ["not attending", "can't make", "unable", "não vou", "não poderei", "não consigo"]):
+    if any(w in lower for w in ["not attending", "can't make", "unable", "não vou", "não poderei", "não consigo", "infelizmente não posso", "não vou conseguir"]):
         rsvp_data[phone]["attending"] = "no"
         guest_flags[phone]["rsvp_done"] = True
 
-    if any(w in lower for w in ["booked flight", "bought ticket", "comprei passagem", "já comprei", "passagem comprada"]):
+    # ── GUEST FLAGS ──
+    if any(w in lower for w in ["booked flight", "bought ticket", "comprei passagem", "já comprei", "passagem comprada", "voo comprado"]):
         guest_flags[phone]["flights_booked"] = True
-
-    if any(w in lower for w in ["passport done", "passaporte pronto", "já tenho passaporte", "passaporte válido", "já tirei"]):
+    if any(w in lower for w in ["passport done", "passaporte pronto", "já tenho passaporte", "passaporte válido", "já tirei", "passaporte feito"]):
         guest_flags[phone]["passport_done"] = True
-
-    if any(w in lower for w in ["booked hotel", "hotel reservado", "já reservei", "hospedagem feita"]):
+    if any(w in lower for w in ["booked hotel", "hotel reservado", "já reservei", "hospedagem feita", "hotel confirmado"]):
         guest_flags[phone]["accommodation_booked"] = True
 
+    # ── DIETARY RESTRICTIONS ──
+    rsvp_data[phone]["dietary_vegetarian"] = any(w in lower for w in ["vegetarian", "vegetariano", "vegetariana"])
+    rsvp_data[phone]["dietary_vegan"] = any(w in lower for w in ["vegan", "vegano", "vegana"])
+    rsvp_data[phone]["dietary_nut_allergy"] = any(w in lower for w in ["nut allergy", "alergia a nozes", "alergia a amendoim", "peanut"])
+    rsvp_data[phone]["dietary_no_beef"] = any(w in lower for w in ["no beef", "sem carne vermelha", "sem boi", "não como carne vermelha"])
+    rsvp_data[phone]["dietary_no_pork"] = any(w in lower for w in ["no pork", "sem porco", "sem suíno", "não como porco"])
+    rsvp_data[phone]["dietary_shellfish"] = any(w in lower for w in ["shellfish", "frutos do mar", "alergia a frutos"])
+
+    # Build dietary string for notes
+    dietary_items = []
+    if rsvp_data[phone]["dietary_vegetarian"]: dietary_items.append("vegetariano")
+    if rsvp_data[phone]["dietary_vegan"]: dietary_items.append("vegano")
+    if rsvp_data[phone]["dietary_nut_allergy"]: dietary_items.append("alergia nozes")
+    if rsvp_data[phone]["dietary_no_beef"]: dietary_items.append("sem carne vermelha")
+    if rsvp_data[phone]["dietary_no_pork"]: dietary_items.append("sem porco")
+    if rsvp_data[phone]["dietary_shellfish"]: dietary_items.append("alergia frutos do mar")
+    rsvp_data[phone]["dietary"] = ", ".join(dietary_items) if dietary_items else "nenhuma"
+
+    # ── DAYS ATTENDING ──
+    days = []
+    if any(w in lower for w in ["all three", "all 3", "os três", "todos os dias", "os 3", "tudo", "24, 25 e 26", "24 e 25 e 26"]):
+        days = ["all"]
+    else:
+        if any(w in lower for w in ["day 1", "dia 1", "24", "winery", "vinícola", "vinho"]):
+            days.append("day1")
+        if any(w in lower for w in ["day 2", "dia 2", "25", "wedding", "casamento", "cerimônia"]):
+            days.append("day2")
+        if any(w in lower for w in ["day 3", "dia 3", "26", "pub", "scholars", "farewell"]):
+            days.append("day3")
+    if days:
+        rsvp_data[phone]["days"] = days
+
+    # ── LOG TO SHEETS ──
     if phone in phone_registry:
         rsvp_data[phone]["name"] = phone_registry[phone]
         rsvp_data[phone]["phone"] = phone
@@ -546,7 +597,7 @@ def get_aurora_response(phone_number, user_message):
         system=SYSTEM_PROMPT,
         messages=messages
     )
-    assistant_message = response.content[0].text
+    assistant_message = sanitize_for_whatsapp(response.content[0].text)
     add_to_conversation(phone_number, "assistant", assistant_message)
 
     if phone_number not in phone_registry:
@@ -580,7 +631,12 @@ def get_aurora_response(phone_number, user_message):
 
 def get_admin_response(phone_number, user_message):
     stats = get_admin_stats()
-    name = "Larissa" if "353833" in phone_number else "Robert"
+    if "353833" in phone_number:
+        name = "Larissa"
+    elif "19292277" in phone_number:
+        name = "Robert"
+    else:
+        name = "Carlotta (wedding planner)"
     context = f"Consulta administrativa de {name}.\n\nDados atuais:\n{json.dumps(stats, indent=2)}\n\nPergunta: {user_message}"
     response = anthropic_client.messages.create(
         model="claude-haiku-4-5-20251001",
@@ -674,6 +730,18 @@ def zapi_webhook():
 
         if data.get('fromMe', False):
             return Response('', status=200)
+
+        # Deduplicate by message ID to prevent Z-API double-sending
+        msg_id = data.get('messageId', '') or data.get('id', '') or data.get('msgId', '')
+        if msg_id and msg_id in processed_message_ids:
+            import sys
+            print(f"Z-API: duplicate message {msg_id} — ignoring", file=sys.stderr)
+            return Response('', status=200)
+        if msg_id:
+            processed_message_ids.add(msg_id)
+            # Keep set from growing forever
+            if len(processed_message_ids) > 1000:
+                processed_message_ids.clear()
 
         text = ''
         if isinstance(data.get('text'), dict):
