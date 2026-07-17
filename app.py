@@ -686,6 +686,35 @@ def extract_capitalized_name(text):
     match = _re.search(r'\b([A-ZÀ-Ú][a-zà-ú\'\-]+(?:\s+[A-ZÀ-Ú][a-zà-ú\'\-]+){1,3})\b', text)
     return match.group(1).strip() if match else None
 
+ADMIN_QUERY_KEYWORDS = [
+    # stats / reports
+    "quantas confirmações", "quantos rsvp", "quem confirmou", "quem não confirmou",
+    "lista de convidados", "guest list", "who rsvped", "how many confirmed",
+    "status do casamento", "wedding status", "relatório", "report", "resumo",
+    "quem está na lista", "who is on the list",
+    # broadcast
+    "[all]", "[bridal]",
+    # reset
+    "[reset]", "resetar tudo", "reset everything",
+]
+
+def is_admin_query(text):
+    """Returns True only if the message is clearly an admin/management query,
+    not a general wedding info question that Aurora can answer normally."""
+    lower = text.lower()
+    # Explicit admin keywords
+    if any(k in lower for k in ADMIN_QUERY_KEYWORDS):
+        return True
+    # Guest list management
+    if any(k in lower for k in ADD_GUEST_KEYWORDS):
+        return True
+    if any(k in lower for k in CHECK_GUEST_KEYWORDS):
+        return True
+    # RSVP on behalf of someone else (not personal)
+    if any(k in lower for k in RSVP_OTHER_KEYWORDS) and not wants_personal_rsvp(text):
+        return True
+    return False
+
 def get_admin_response(phone_number, user_message):
     norm = normalize_phone(phone_number)
     name = ADMIN_IDENTITY.get(norm, "Carlotta (wedding planner)")
@@ -699,7 +728,7 @@ def get_admin_response(phone_number, user_message):
         save_state()
         return "🔄 Tudo resetado! Conversas, RSVPs e dados de teste foram apagados. Pronto para recomeçar."
 
-    # --- Add a new guest to the spreadsheet (Larissa and Robert only) ---
+    # --- Add a new guest (Larissa and Robert only) ---
     if any(k in lower_msg for k in ADD_GUEST_KEYWORDS):
         if norm not in ("353833986529", "19292277546"):
             return "Só a Larissa ou o Robert podem adicionar convidados à lista. 😊"
@@ -728,14 +757,13 @@ def get_admin_response(phone_number, user_message):
         if candidate:
             target = find_known_guest(candidate) or candidate
             active_subject[phone_number] = target
-            if not conversations.get(phone_number) or active_subject.get(phone_number) != target:
-                conversations[phone_number] = [
-                    {"role": "user", "content": f"[sistema: RSVP sendo feito por {name} em nome de {target}, já identificado, não precisa perguntar o nome]"},
-                    {"role": "assistant", "content": f"Perfeito! Vamos registrar a presença de *{target}*! 💕 Só para confirmar — é a grafia certa do nome?"}
-                ]
+            conversations[phone_number] = [
+                {"role": "user", "content": f"[sistema: RSVP sendo feito por {name} em nome de {target}, já identificado, não precisa perguntar o nome]"},
+                {"role": "assistant", "content": f"Perfeito! Vamos registrar a presença de *{target}*! 💕 Só para confirmar — é a grafia certa do nome?"}
+            ]
             return get_aurora_response(phone_number, user_message)
 
-    # --- Personal RSVP for the admin's own attendance ---
+    # --- Personal RSVP for the admin ---
     if wants_personal_rsvp(user_message):
         active_subject[phone_number] = name
         phone_registry.setdefault(phone_number, name)
@@ -746,28 +774,40 @@ def get_admin_response(phone_number, user_message):
             ]
         return get_aurora_response(phone_number, user_message)
 
-    if phone_number not in admin_conversations:
-        admin_conversations[phone_number] = []
-    history = admin_conversations[phone_number]
+    # --- Admin stats/analytics queries ---
+    if any(k in lower_msg for k in ADMIN_QUERY_KEYWORDS):
+        if phone_number not in admin_conversations:
+            admin_conversations[phone_number] = []
+        history = admin_conversations[phone_number]
+        stats = get_admin_stats()
+        context = f"[{name} está consultando. Dados atuais: {json.dumps(stats)}]\n\n{user_message}"
+        messages = history + [{"role": "user", "content": context}]
+        response = anthropic_client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=600,
+            system=ADMIN_SYSTEM,
+            messages=messages
+        )
+        reply = sanitize_for_whatsapp(response.content[0].text)
+        history.append({"role": "user", "content": user_message})
+        history.append({"role": "assistant", "content": reply})
+        if len(history) > 20:
+            admin_conversations[phone_number] = history[-20:]
+        save_state()
+        return reply
 
-    stats = get_admin_stats()
-    context = f"[{name} está consultando. Dados atuais em JSON, use apenas o necessário: {json.dumps(stats)}]\n\n{user_message}"
-
-    messages = history + [{"role": "user", "content": context}]
-    response = anthropic_client.messages.create(
-        model="claude-haiku-4-5-20251001",
-        max_tokens=600,
-        system=ADMIN_SYSTEM,
-        messages=messages
-    )
-    reply = sanitize_for_whatsapp(response.content[0].text)
-
-    history.append({"role": "user", "content": user_message})
-    history.append({"role": "assistant", "content": reply})
-    if len(history) > 20:
-        admin_conversations[phone_number] = history[-20:]
-    save_state()
-    return reply
+    # --- DEFAULT: treat admin as a normal guest for all other questions ---
+    # (flights, money, Rome tips, dress code, hotels, etc.)
+    # Seed the conversation with the admin's identity if not already set
+    if not conversations.get(phone_number):
+        phone_registry[phone_number] = name
+        conversations[phone_number] = [
+            {"role": "user", "content": f"[sistema: esta pessoa é {name}, já identificada na lista, responda normalmente como qualquer convidado]"},
+            {"role": "assistant", "content": f"Oi {name.split()[0]}! 💕 Como posso te ajudar?"}
+        ]
+    elif phone_number not in phone_registry:
+        phone_registry[phone_number] = name
+    return get_aurora_response(phone_number, user_message)
 
 def send_whatsapp_message(to_number, message, from_number):
     message = sanitize_for_whatsapp(message)
