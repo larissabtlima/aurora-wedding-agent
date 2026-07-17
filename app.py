@@ -26,7 +26,8 @@ DATA_DIR = os.environ.get("DATA_DIR", "/var/data")
 DATA_FILE = os.path.join(DATA_DIR, "aurora_data.json")
 _save_lock = threading.Lock()
 
-conversations = {}       # phone -> [ {role, content}, ... ]
+conversations = {}       # phone -> [ {role, content}, ... ]  (guest/RSVP conversations)
+admin_conversations = {} # phone -> [ {role, content}, ... ]  (admin analytics conversations)
 phone_registry = {}      # phone -> name of the PHONE OWNER (not necessarily who's being RSVP'd)
 rsvp_data = {}           # guest_name (lowercase) -> rsvp details
 all_phones = set()
@@ -40,6 +41,7 @@ pending_subject = {}     # phone -> name Aurora just asked to confirm, awaiting 
 def _state_dict():
     return {
         "conversations": conversations,
+        "admin_conversations": admin_conversations,
         "phone_registry": phone_registry,
         "rsvp_data": rsvp_data,
         "all_phones": list(all_phones),
@@ -61,12 +63,13 @@ def save_state():
             print(f"SAVE STATE ERROR: {str(e)}", file=sys.stderr)
 
 def load_state():
-    global conversations, phone_registry, rsvp_data, all_phones, guest_flags, active_subject, pending_subject
+    global conversations, admin_conversations, phone_registry, rsvp_data, all_phones, guest_flags, active_subject, pending_subject
     try:
         if os.path.exists(DATA_FILE):
             with open(DATA_FILE, "r", encoding="utf-8") as f:
                 data = json.load(f)
             conversations = data.get("conversations", {})
+            admin_conversations = data.get("admin_conversations", {})
             phone_registry = data.get("phone_registry", {})
             rsvp_data = data.get("rsvp_data", {})
             all_phones = set(data.get("all_phones", []))
@@ -107,6 +110,60 @@ BRIDAL_PARTY_NAMES = {
     "cian mc donnell", "corey brennan"
 }
 
+# Full guest list, one name per line, used for admin "is X on the list?" /
+# "add X to the list" checks. Kept separately from SYSTEM_PROMPT's prose
+# version so the admin flow can do simple substring matching against it.
+KNOWN_GUEST_NAMES = [
+    "Robert Daly", "Larissa Daly", "Michael Daly", "Mary Daly", "Christopher Daly",
+    "Thomas O Brien", "Kornel Cwiklinski", "Alan Cwiklinski", "Patryk Wesolowski",
+    "Linda Cahill", "Conor Cahill", "Cathy Cahill", "Ayla Cahill", "Avean Cahill", "Caera Cahill",
+    "Will Daly", "Ezgi Atakul", "Brendan Daly", "Deirdre Daly", "Chris Daly", "Cian Mc Donnell",
+    "Corey Brennan", "George O Mahony", "Charlotte Barton", "James Roche", "Luke Mccarthty",
+    "Sean Murphy", "Joanne Murphy", "Patrick Fitzgibbon", "Stephanie Fitzgibbon", "Shane Burke",
+    "Shane Galvin", "Rebecca Perrott", "Mikey O Donovan", "Peter Olden", "Pauline Olden",
+    "Mike O'Riordan", "Donica O'Leary", "Kevin Brennan", "Niamh Brennan", "Dylan Leahy",
+    "Shane Fitzgerald", "David Dunne", "Aisling Doherty", "David Martin", "Pat O'Halloran",
+    "Diana O'Halloran", "Brendan O'Halloran", "Robert Power", "Sarah Power", "Brian Mc Donnell",
+    "Mossie Mc Donnell", "Gaye Mc Donnell", "Julie Mc Donnell", "Simon Stewart", "Shane Adams",
+    "Ross Martin", "Patrick Daly", "Elizabeth Daly", "Olan Kinsella", "Richard Badurski",
+    "Chris Gardner", "Alessandra Grabowski", "Minalkumar Patel", "Asra Warsi", "Loc Trinh",
+    "Don Gaudreau", "Scott Lancet", "Erica Lancet", "Dylan Kingston", "Chris Lyons", "Nicole Lyons",
+    "Colin Williams", "Carmela Williams", "Molly Elkins", "Adam Taub", "Jonnhy Daly", "Mauna Daly",
+    "Margareth Dillworth", "Matt Dilworth", "Lily May", "Liam Kelleher", "Caroline Kelleher",
+    "Kristina Kelleher", "Johnny Dilworth", "Seamus Kelleher", "Danielle Dilworth", "Shane Egan",
+    "Dan Kelleher", "Emily Forrest", "Gline Mase", "Cathal Reynolds", "Nathan Lockhart",
+    "Branden Ciranni", "Paul Murphy", "Luke Mc Carthy", "Eoin Power", "Eleanor Bishop",
+    "Yves Sohege", "Niall Mc Grath", "James Mc Hugh", "Patrick Egan", "Orla Cahill", "Lee Hannigan",
+    "Caoimhe McSorley", "Dustin Brown", "Bo Landsman", "Tracey Kelleher",
+    "Laura Teixeira", "Anna Laura Teixeira", "Fabiano Lima", "Jhenifer Bering", "Alexia Lima",
+    "Meira Lima", "Kelly Cristina", "Igor Lima", "Milâine Aparecida", "Jadeilson Lima",
+    "Renato Lima", "Leonardo Lima", "Geovanine Mariana", "Aline Mariana", "Rafael Azevedo",
+    "Athila Mariano", "Lucinha Mendes", "Nalva Mendes", "Leidy Mendes", "Daiana Ribeiro",
+    "Silvio", "Gabriel", "Lindinalva Batista", "Roberto Batista", "Malu Teixeira",
+    "Toninho Teixeira", "Angel Gabriel", "Wesley Muniesa", "Laisa Teixeira", "Guilherme",
+    "Talles Guilherme", "Maria Fernanda", "Wigney Teixeira", "Izabel Teixeira", "Saide Alves",
+    "Bruna Alves", "Roger Boorges", "Hyago Alves", "Maria Clara", "Andre da Silva",
+    "Camila Campos", "Debora Araújo", "Thaíse Silva", "Hugo Lopes", "Aline Olden",
+    "Thaís Rebuá", "Richard Hoey", "Róisín O'Brien", "Ameer Gazder", "Elisha Bernie",
+    "Eimear Flaherty", "Islam Erkale", "Carly Hochhauser", "Mathew Hutton", "Jaya Patel",
+    "Wai Mun", "Eduarda Santana", "Mark Donnelly", "Haydee Matos", "Kevin O Dwyer",
+    "Paola Gomes", "Jackson Ferreira", "Cian Whyte", "Warley Ferreira", "Ricardo Santos",
+    "Ana Luiza", "Andre Villa", "Priscilla Figueiredo", "Andrew Bolton", "Elen Weber",
+    "Tay Vieira", "Rafeela", "Leo", "Stephanie Marques", "Ingrid Mariano", "Sean O Sullivan",
+    "Diego Alcantara", "Alexia Gouveia"
+]
+
+def find_known_guest(name_query):
+    """Returns the matching guest name from the known list, or None."""
+    q = name_query.lower().strip()
+    if not q:
+        return None
+    for known in KNOWN_GUEST_NAMES:
+        k = known.lower()
+        if k == q or q in k or k in q:
+            return known
+    return None
+
 BRAZIL_NAME_MARKERS = None  # placeholder, Brazilian guest list is matched via the guest list itself
 
 def sanitize_for_whatsapp(text):
@@ -114,6 +171,8 @@ def sanitize_for_whatsapp(text):
     text = re.sub(r'\*\*(.+?)\*\*', r'*\1*', text)
     text = re.sub(r'#{1,6}\s+', '', text)
     text = re.sub(r'^[-*_]{3,}$', '', text, flags=re.MULTILINE)
+    text = re.sub(r'^\|?\s*[-:]+\s*\|.*$', '', text, flags=re.MULTILINE)  # markdown table separator rows
+    text = re.sub(r'^\|(.+)\|$', lambda m: ' • '.join(c.strip() for c in m.group(1).split('|') if c.strip()), text, flags=re.MULTILINE)  # table rows -> plain list
     return text.strip()
 
 def log_to_sheets(data_type, data):
@@ -131,6 +190,12 @@ def log_to_sheets(data_type, data):
     except Exception as e:
         import sys
         print(f"SHEETS ERROR: {str(e)}", file=sys.stderr)
+
+def add_guest_to_sheet(name, origin="Added via Aurora"):
+    log_to_sheets("add_guest", {"name": name, "origin": origin})
+    if name not in KNOWN_GUEST_NAMES:
+        KNOWN_GUEST_NAMES.append(name)
+    save_state()
 
 def alert_larissa(message):
     try:
@@ -364,9 +429,15 @@ REGRAS AURORA:
 10. Nunca 100% de certeza se houver dúvida
 11. Cada RSVP pertence a UMA pessoa específica — nunca misturar dados de convidados diferentes na mesma conversa"""
 
-ADMIN_SYSTEM = """Você é a interface administrativa da Aurora para Larissa, Robert e Carlotta (cerimonialista).
-Acesso completo a conversas, RSVPs e dados dos convidados.
-Respostas honestas, específicas, concisas. Listas formatadas claramente."""
+ADMIN_SYSTEM = """Você é a interface administrativa da Aurora para Larissa, Robert e Carlotta.
+
+REGRAS DE FORMATO — CRÍTICO:
+- Isto é WhatsApp. NUNCA use tabelas markdown (| --- |). Elas aparecem quebradas no WhatsApp.
+- Use listas simples com emojis ou quebras de linha, nunca tabelas.
+- Responda SOMENTE o que foi perguntado. Não despeje o relatório completo de estatísticas a cada mensagem — só mostre números quando a pergunta for sobre números.
+- Seja breve. 2 a 5 linhas na maioria das vezes, a menos que a pessoa peça um relatório completo.
+- Continue a conversa naturalmente, como um assistente que lembra o que já foi dito — não recomece do zero a cada mensagem.
+- Se não souber algo com certeza, diga isso claramente em vez de inventar."""
 
 def get_admin_stats():
     attending = sum(1 for r in rsvp_data.values() if r.get("attending") == "yes")
@@ -424,6 +495,13 @@ def extract_rsvp_from_response(phone, response_text, user_message):
 
     subject_name = active_subject.get(phone) or phone_registry.get(phone) or "unknown"
     key = subject_name.lower().strip()
+
+    # Migrate any stale "unknown" entry for this phone onto the real name
+    if key != "unknown" and phone in [rsvp_data.get("unknown", {}).get("phone")]:
+        if "unknown" in rsvp_data:
+            rsvp_data[key] = {**rsvp_data.pop("unknown"), **rsvp_data.get(key, {})}
+        if "unknown" in guest_flags:
+            guest_flags[key] = {**guest_flags.pop("unknown"), **guest_flags.get(key, {})}
 
     lower = (user_message + " " + response_text).lower()
     if key not in rsvp_data:
@@ -533,22 +611,161 @@ def get_aurora_response(phone_number, user_message):
         )
     return assistant_message
 
+ADMIN_IDENTITY = {
+    "353833986529": "Larissa Daly",
+    "19292277546": "Robert Daly",
+    "393490541017": "Carlotta"
+}
+
+PERSONAL_RSVP_KEYWORDS = [
+    "quero rsvp", "quero confirmar", "sou convidad", "meu rsvp",
+    "confirmar minha presença", "confirmar minha presenca",
+    "i want to rsvp", "i'm also a guest", "im also a guest", "my own rsvp"
+]
+
+def wants_personal_rsvp(text):
+    lower = text.lower()
+    return any(k in lower for k in PERSONAL_RSVP_KEYWORDS)
+
+def find_known_guest(name):
+    """Fuzzy-match a name against the built-in guest list in the system prompt.
+    Returns the best-matching canonical name, or None."""
+    search = name.lower().strip()
+    # Full guest list extracted from SYSTEM_PROMPT at runtime — scan for name matches
+    import re as _re2
+    # Pull all names from the guest list sections in SYSTEM_PROMPT
+    candidates = _re2.findall(r'(?:^|\n)\s*([A-ZÀ-Ú][a-zà-úA-ZÀ-Ú\'\-]+(?: [A-ZÀ-Ú][a-zà-úA-ZÀ-Ú\'\-]+){0,3})', SYSTEM_PROMPT)
+    best = None
+    for c in candidates:
+        cname = c[0].strip()
+        if len(cname) < 3:
+            continue
+        if cname.lower() == search:
+            return cname
+        if search in cname.lower() or cname.lower() in search:
+            best = cname
+    return best
+
+def add_guest_to_sheet(guest_name, added_by="admin", notes=""):
+    """Log a new guest addition to the spreadsheet via the Apps Script webhook."""
+    payload = {
+        "type": "add_guest",
+        "data": {
+            "name": guest_name,
+            "added_by": added_by,
+            "notes": notes,
+            "timestamp": str(datetime.datetime.utcnow())
+        }
+    }
+    log_to_sheets("add_guest", payload["data"])
+    import sys
+    print(f"ADD GUEST: {guest_name}", file=sys.stderr)
+
+ADD_GUEST_KEYWORDS = ["adicionar", "adiciona", "add guest", "add to the list", "add to list",
+                       "colocar na lista", "incluir na lista", "esquecemos", "we forgot"]
+CHECK_GUEST_KEYWORDS = ["está na lista", "esta na lista", "tá na lista", "ta na lista",
+                         "is on the list", "is she on", "is he on", "procurar convidado"]
+RSVP_OTHER_KEYWORDS = ["rsvp"]
+RESET_KEYWORDS = ["[reset]", "resetar tudo", "reset everything", "apagar tudo teste"]
+
+import re as _re
+
+def extract_name_after_keyword(text, keywords):
+    lower = text.lower()
+    for kw in keywords:
+        idx = lower.find(kw)
+        if idx != -1:
+            remainder = text[idx + len(kw):]
+            remainder = _re.sub(r'^[\s:,-]+', '', remainder)
+            remainder = _re.sub(r'[.?!]+$', '', remainder).strip()
+            if remainder:
+                return remainder
+    return None
+
+def extract_capitalized_name(text):
+    match = _re.search(r'\b([A-ZÀ-Ú][a-zà-ú\'\-]+(?:\s+[A-ZÀ-Ú][a-zà-ú\'\-]+){1,3})\b', text)
+    return match.group(1).strip() if match else None
+
 def get_admin_response(phone_number, user_message):
+    norm = normalize_phone(phone_number)
+    name = ADMIN_IDENTITY.get(norm, "Carlotta (wedding planner)")
+    lower_msg = user_message.lower()
+
+    # --- Reset everything (only useful before invitations go out) ---
+    if any(k in lower_msg for k in RESET_KEYWORDS):
+        conversations.clear(); admin_conversations.clear(); rsvp_data.clear()
+        guest_flags.clear(); active_subject.clear(); pending_subject.clear()
+        phone_registry.clear(); all_phones.clear()
+        save_state()
+        return "🔄 Tudo resetado! Conversas, RSVPs e dados de teste foram apagados. Pronto para recomeçar."
+
+    # --- Add a new guest to the spreadsheet ---
+    if any(k in lower_msg for k in ADD_GUEST_KEYWORDS):
+        candidate = extract_name_after_keyword(user_message, ADD_GUEST_KEYWORDS) or extract_capitalized_name(user_message)
+        if candidate:
+            existing = find_known_guest(candidate)
+            if existing:
+                return f"'{existing}' já está na lista! Não precisa adicionar de novo. 😊"
+            add_guest_to_sheet(candidate)
+            return f"✅ Adicionei *{candidate}* à lista de convidados na planilha! Já pode confirmar presença dele(a) quando quiser."
+        return "Qual é o nome completo da pessoa que você quer adicionar? 😊"
+
+    # --- Check if someone is on the list ---
+    if any(k in lower_msg for k in CHECK_GUEST_KEYWORDS):
+        candidate = extract_capitalized_name(user_message)
+        if candidate:
+            found = find_known_guest(candidate)
+            if found:
+                return f"Sim! *{found}* está na lista de convidados. ✅"
+            return f"Não encontrei *{candidate}* na lista. Quer que eu adicione? É só dizer 'adicionar {candidate}'."
+        return "Qual é o nome que você quer verificar?"
+
+    # --- RSVP on behalf of another guest ---
+    if any(k in lower_msg for k in RSVP_OTHER_KEYWORDS) and not wants_personal_rsvp(user_message):
+        candidate = extract_capitalized_name(user_message)
+        if candidate:
+            target = find_known_guest(candidate) or candidate
+            active_subject[phone_number] = target
+            if not conversations.get(phone_number) or active_subject.get(phone_number) != target:
+                conversations[phone_number] = [
+                    {"role": "user", "content": f"[sistema: RSVP sendo feito por {name} em nome de {target}, já identificado, não precisa perguntar o nome]"},
+                    {"role": "assistant", "content": f"Perfeito! Vamos registrar a presença de *{target}*! 💕 Só para confirmar — é a grafia certa do nome?"}
+                ]
+            return get_aurora_response(phone_number, user_message)
+
+    # --- Personal RSVP for the admin's own attendance ---
+    if wants_personal_rsvp(user_message):
+        active_subject[phone_number] = name
+        phone_registry.setdefault(phone_number, name)
+        if not conversations.get(phone_number):
+            conversations[phone_number] = [
+                {"role": "user", "content": f"[sistema: esta conversa é com {name}, já identificado, não precisa perguntar o nome]"},
+                {"role": "assistant", "content": f"Perfeito! Vamos lá então! 💕 Só para confirmar — você é **{name}** da nossa lista, certo?"}
+            ]
+        return get_aurora_response(phone_number, user_message)
+
+    if phone_number not in admin_conversations:
+        admin_conversations[phone_number] = []
+    history = admin_conversations[phone_number]
+
     stats = get_admin_stats()
-    if "353833" in phone_number:
-        name = "Larissa"
-    elif "19292277" in phone_number:
-        name = "Robert"
-    else:
-        name = "Carlotta (wedding planner)"
-    context = f"Consulta administrativa de {name}.\n\nDados atuais:\n{json.dumps(stats, indent=2)}\n\nPergunta: {user_message}"
+    context = f"[{name} está consultando. Dados atuais em JSON, use apenas o necessário: {json.dumps(stats)}]\n\n{user_message}"
+
+    messages = history + [{"role": "user", "content": context}]
     response = anthropic_client.messages.create(
         model="claude-haiku-4-5-20251001",
-        max_tokens=1024,
+        max_tokens=600,
         system=ADMIN_SYSTEM,
-        messages=[{"role": "user", "content": context}]
+        messages=messages
     )
-    return response.content[0].text
+    reply = sanitize_for_whatsapp(response.content[0].text)
+
+    history.append({"role": "user", "content": user_message})
+    history.append({"role": "assistant", "content": reply})
+    if len(history) > 20:
+        admin_conversations[phone_number] = history[-20:]
+    save_state()
+    return reply
 
 def send_whatsapp_message(to_number, message, from_number):
     message = sanitize_for_whatsapp(message)
