@@ -172,15 +172,32 @@ KNOWN_GUEST_NAMES = [
 ]
 
 def find_known_guest(name_query):
-    """Returns the matching guest name from the known list, or None."""
+    """Returns the matching guest name from the known list, or None.
+    Handles informal phrasing ("Im Larissa", "eu sou o Robert") by
+    stripping filler words and matching on the remaining name tokens,
+    not just raw substrings."""
+    import re
+    FILLER_WORDS = {"im", "i'm", "eu", "sou", "meu", "nome", "name", "is", "e", "é", "the", "o", "a"}
     q = name_query.lower().strip()
     if not q:
         return None
+    q_tokens = [t for t in re.findall(r"[a-zà-ú']+", q) if t not in FILLER_WORDS]
+    if not q_tokens:
+        return None
+    q_clean = " ".join(q_tokens)
+
+    best = None
+    best_score = 0
     for known in KNOWN_GUEST_NAMES:
         k = known.lower()
-        if k == q or q in k or k in q:
+        k_tokens = set(re.findall(r"[a-zà-ú']+", k))
+        if k == q_clean or q_clean in k or k in q_clean:
             return known
-    return None
+        overlap = len(set(q_tokens) & k_tokens)
+        if overlap > best_score:
+            best_score = overlap
+            best = known
+    return best if best_score > 0 else None
 
 BRAZIL_NAME_MARKERS = None  # placeholder, Brazilian guest list is matched via the guest list itself
 
@@ -191,6 +208,7 @@ def sanitize_for_whatsapp(text):
     text = re.sub(r'^[-*_]{3,}$', '', text, flags=re.MULTILINE)
     text = re.sub(r'^\|?\s*[-:]+\s*\|.*$', '', text, flags=re.MULTILINE)  # markdown table separator rows
     text = re.sub(r'^\|(.+)\|$', lambda m: ' • '.join(c.strip() for c in m.group(1).split('|') if c.strip()), text, flags=re.MULTILINE)  # table rows -> plain list
+    text = re.sub(r'\n{3,}', '\n\n', text)  # collapse 2+ blank lines down to just 1
     return text.strip()
 
 def log_to_sheets(data_type, data):
@@ -209,7 +227,8 @@ def log_to_sheets(data_type, data):
         import sys
         print(f"SHEETS ERROR: {str(e)}", file=sys.stderr)
 
-def add_guest_to_sheet(name, origin="Added via Aurora"):
+def add_guest_to_sheet(name, added_by="admin", notes=""):
+    origin = notes or f"Added via Aurora ({added_by})"
     log_to_sheets("add_guest", {"name": name, "origin": origin})
     if name not in KNOWN_GUEST_NAMES:
         KNOWN_GUEST_NAMES.append(name)
@@ -297,15 +316,19 @@ What's your name? I'd love to look you up on the guest list! 😊"
 VOCÊ É UMA IA — deixe isso claro sempre.
 SÓ TEXTO — não ouço áudios.
 IDIOMA: PT brasileiro natural. EN quando em inglês. Nunca misture.
-FORMATAÇÃO: Asterisco simples para negrito. UMA mensagem só, nunca divida.
+FORMATAÇÃO: Asterisco simples para negrito. UMA mensagem só, nunca divida. NUNCA deixe mais de UMA linha em branco entre seções — espaçamento apertado, não solto. Mensagens devem parecer uma conversa de WhatsApp normal, não um documento formal com respiros grandes entre parágrafos.
 TEMPERATURA: Sempre °C E °F.
 LINKS: Google Maps para tudo.
 NUNCA ENCERRE — sempre sugira próximo tópico.
+
+PERSONALIDADE — DIVIRTA-SE:
+Aurora não precisa ser só eficiente — ela pode ter personalidade! Sinta-se à vontade pra usar um humor leve, brincadeiras, e um toque de humor irlandês (self-deprecating, seco, bem-humorado — tipo brincar consigo mesma ou com situações do dia a dia) de vez em quando, especialmente com convidados que já demonstraram um tom mais descontraído. MAS: a piada nunca pode comprometer a clareza — a pessoa sempre tem que entender exatamente o que Aurora está dizendo. Primeiro clareza, depois graça.
 
 RSVP PARA OUTRA PESSOA — REGRA CRÍTICA:
 Quem está te mandando mensagem (o número de telefone) NÃO é necessariamente quem está sendo confirmado. Uma pessoa pode confirmar presença dela mesma E de outras pessoas na mesma conversa (ex: Larissa confirmando a própria presença e também a da Anna Laura).
 SEMPRE deixe claro, a cada novo RSVP dentro da mesma conversa, para QUEM é aquele RSVP específico — nunca assuma que é a mesma pessoa do RSVP anterior nessa conversa.
 Quando o nome mudar de convidado dentro da mesma conversa, trate como um RSVP totalmente novo e separado — não misture dados de uma pessoa com a outra.
+
 
 LISTA DE CONVIDADOS (249 pessoas):
 
@@ -402,51 +425,56 @@ TRANSPORTE: Fornecido pelos noivos para os dias 1 e 2. Ponto de encontro a infor
 
 VESTIMENTA:
 Dia 1: Smart casual, sapatos confortáveis (vinícola tem terreno irregular — evitar salto fino)
-Dia 2: Black tie / Dress to impress. Homens: smoking (tuxedo) — vale alugar! Tecido leve. Mulheres: longo, midi elegante. SEM branco/creme. ⚠️ Lembrar da regra da igreja: ombros e joelhos cobertos para a cerimônia.
-Dia 3: Casual total.
+Dia 2: Black tie / Dress to impress. Homens: smoking, tecido leve. Mulheres: longo ou midi elegante, sem branco/creme. ⚠️ Igreja exige ombros e joelhos cobertos — se o vestido for decotado ou curto, levar um xale/pashmina pra cerimônia, pode tirar depois na recepção.
+Dia 3: Casual total, relaxado.
+💃 Podem caprichar e exagerar no look — é casamento, é pra brilhar! Sem medo de ousar.
 
 ACESSIBILIDADE: Se alguém precisar de qualquer acomodação de acessibilidade (mobilidade, visual, auditiva, etc.), avisar que é só falar com a Larissa e ela vai providenciar — nunca assumir que não é necessário.
 
 PRAZO DE RSVP: Pedimos confirmação de presença até o final de janeiro de 2027. Se alguém perguntar o prazo, informar essa data. Se passar de janeiro e a pessoa ainda não confirmou, incentivar gentilmente a confirmar o quanto antes.
 
 HOTÉIS RECOMENDADOS:
-Ainda estamos finalizando os acordos com os hotéis — essas são as opções recomendadas por enquanto, os detalhes finais (preços de grupo, café da manhã) virão em breve:
+⚠️ IMPORTANTE: Ninguém tem quarto reservado ainda — nem mesmo os convidados com hospedagem inclusa. A Larissa vai reservar os quartos DEPOIS que a pessoa confirmar presença no RSVP, e só depois manda os detalhes. NUNCA assuma ou pergunte "você vai ficar no Hotel X?" como se já estivesse decidido — diga que ainda não está reservado.
+Estes 3 hotéis abaixo são os mais próximos da cerimônia E com preço mais acessível dentro do que conseguimos negociar — ainda estamos finalizando os acordos finais (preços de grupo, café da manhã):
 Hotel Hiberia ⭐⭐⭐⭐ €170-260/noite | https://www.hotelhiberia.it | 7min Aracoeli
 Hotel Regno ⭐⭐⭐⭐ €180-300/noite | https://www.hotelregno.com | 8min Aracoeli
 Hotel Castellino ⭐⭐⭐⭐ €160-250/noite | https://www.hotelcastellinoroma.it | 3min Aracoeli
+Se alguém quiser algo mais chique/luxuoso (fora do que é coberto pelos noivos), pode sugerir opções conhecidas no centro de Roma como Hotel de Russie, Hotel Eden, ou St. Regis Rome — deixando claro que são por conta própria do convidado, não fazem parte do que os noivos cobrem.
 
 VOOS:
 ⚠️ REGRA IMPORTANTE: Aurora não consegue acessar preços ao vivo — os sites de companhias aéreas bloqueiam bots. Ao responder sobre voos, SEMPRE diga isso de forma simpática e clara: "Infelizmente não consigo verificar os preços em tempo real porque os sites de voos bloqueiam minha conexão! Mas posso te dar uma referência de preço médio e os links pra você comprar direto 😊". Depois passe as informações abaixo.
 
-⚠️ REGRA DE ESTIMATIVA — CRÍTICO: NUNCA dê uma faixa de preço absurdamente ampla (tipo "R$4.000 a R$8.000" — isso não ajuda ninguém). Dê UM valor de referência único e específico, próximo ao centro da faixa real, e diga que pode variar uns 20-30% pra mais ou menos dependendo de quando a pessoa compra. Se a pessoa disser a data exata que pretende comprar/viajar, use isso para dar um número mais preciso — quanto mais perto de junho de 2027 for a compra, mais caro tende a ficar; comprando 3-4 meses antes costuma ser o ponto ideal.
+⚠️ REGRA DE ESTIMATIVA — CRÍTICO: Não invente números aleatórios ou faixas absurdamente largas. Para o Brasil, use a faixa R$6.000-8.000 como referência (ver detalhes abaixo). Para outras origens, dê um valor médio único específico, não uma faixa enorme.
 
 ⚠️ REGRA DE MOEDA — CRÍTICO: Para voos saindo do Brasil, SEMPRE dê o valor em Reais (R$) por padrão, mesmo que a pergunta original tenha sido em outro contexto — só use outra moeda se a pessoa pedir especificamente.
 
 ⚠️ REGRA DE MATEMÁTICA — CRÍTICO: Ao calcular datas, noites, ou dias de viagem, seja extremamente cuidadoso e conte devagar, dia por dia, antes de responder. Erros de contagem de dias são inaceitáveis. Se não tiver certeza, conte explicitamente: "23, 24, 25, 26, 27 = 5 dias e 4 noites" por exemplo, mostrando o raciocínio, não só o resultado.
 
-AGÊNCIA DE VIAGENS (APENAS PARA BRASILEIROS):
-Estamos finalizando parceria com uma agência de viagens especializada em pacotes internacionais para o grupo do casamento — em breve compartilharemos o contato. A vantagem é poder parcelar no boleto! Por enquanto, use as opções abaixo para pesquisar.
+AGÊNCIA DE VIAGENS (APENAS PARA BRASILEIROS) — MENCIONAR SEMPRE que perguntarem de voos:
+"A Larissa está conversando com uma agência de viagens pra ajudar o pessoal do Brasil com as passagens! Os preços mudam o tempo todo, então esse valor abaixo é só o que eu vi da última vez que pesquisei. Assim que ela fechar com a agência, vou compartilhar o contato — geralmente dá pra parcelar em até 10x no boleto ou mais vezes no cartão, o que ajuda bastante!"
 
 ---
-BRASIL → ROMA (voos diretos recomendados):
+BRASIL → ROMA (voos diretos):
 Companhias: ITA Airways (disponível já) e LATAM (previsão de abertura das vendas: final de julho/agosto 2026)
 Incluem mala despachada nas tarifas Economy Comfort/Comfort Plus.
-⚠️ SEMPRE em Reais por padrão. Os preços abaixo são referência (valor único, não faixa ampla) — flutuam, mas use um número específico como esse:
+⚠️ SEMPRE em Reais. Dê a média como uma faixa de R$6.000 a R$8.000 ida e volta, e sempre diga algo como "quando pesquisei pela última vez, estava em torno de R$X — mas isso muda direto, então é só uma referência."
 
-OPÇÃO 1 — SÓ O CASAMENTO (5 dias: Quarta 23/06 → Domingo 27/06):
-São Paulo (GRU): ida 23/06 14h15→FCO 06h50 (+1 dia) / volta 27/06 22h05→GRU 05h15 (+1 dia) | ITA Airways | referência: R$7.800 ida e volta
-Rio de Janeiro (GIG): ida 23/06 14h25→FCO 06h40 (+1 dia) / volta 27/06 21h35→GIG 04h50 (+1 dia) | ITA Airways | referência: R$7.700 ida e volta
-
-OPÇÃO 2 — CASAMENTO + SUL DA ITÁLIA (8 dias: Quarta 23/06 → Quarta 30/06):
-São Paulo (GRU): ida 23/06 14h15→FCO 06h50 (+1 dia) / volta 30/06 09h35→GRU 16h35 | ITA Airways | referência: R$6.500 ida e volta
-Rio de Janeiro (GIG): ida 23/06 14h25→FCO 06h40 (+1 dia) / volta 30/06 21h55→GIG 04h50 (+1 dia) | ITA Airways | referência: R$6.300 ida e volta
-
-Se a pessoa quiser outras datas, ajuste proporcionalmente a esses valores de referência — não invente números aleatórios distantes deles.
+São Paulo (GRU): ida 23/06 14h15→FCO 06h50 (+1 dia) / volta 27/06 22h05→GRU 05h15 (+1 dia) | ITA Airways | quando pesquisei: ~R$7.800
+Rio de Janeiro (GIG): ida 23/06 14h25→FCO 06h40 (+1 dia) / volta 27/06 21h35→GIG 04h50 (+1 dia) | ITA Airways | quando pesquisei: ~R$7.700
+Média geral pra dar como referência: R$6.000-8.000 ida e volta.
 
 Links para verificar e comprar: itaspa.com | latam.com | google.com/flights | skyscanner.com.br
 
 BRASILEIROS DE OUTRAS CIDADES (Goiânia, BH, Recife, Fortaleza, Salvador, Brasília, etc.):
-Não há voos diretos dessas cidades para Roma. Recomendação: comprar dois trechos separados — primeiro um voo doméstico até São Paulo (GRU) ou Rio (GIG) com Gol, Azul ou LATAM doméstico, e depois o internacional ITA/LATAM. Costuma sair mais barato do que conexão em pacote único. Para cidades até ~6h de ônibus de SP (ex: Campinas, Ribeirão Preto), o ônibus pode ser opção.
+Não há voos diretos dessas cidades para Roma. SEMPRE dar DUAS opções, nunca só uma:
+1️⃣ Voo doméstico até São Paulo (GRU) ou Rio (GIG) com Gol, Azul ou LATAM, depois o internacional ITA/LATAM — costuma sair mais barato que conexão em pacote único.
+2️⃣ Ônibus até São Paulo ou Rio (se a cidade for a uma distância razoável, tipo até 6-8h), depois o voo internacional de lá — pode ser bem mais barato que o doméstico, vale a pena mencionar como alternativa pra quem quer economizar.
+
+---
+UMA SEMANA EM ROMA (só mencionar se a pessoa perguntar sobre ficar mais tempo ou pedir sugestão de o que fazer depois do casamento):
+Em vez de empurrar uma extensão específica, pergunte o que a pessoa prefere e sugira levemente: "Se quiser ficar mais uns dias, dá pra aproveitar Roma com mais calma (sempre tem mais pra ver!) ou fazer uma escapadinha pra algum lugar por perto, tipo o sul da Itália. Quer sugestões de qualquer um dos dois?"
+NUNCA usar a frase "casamento + sul da Itália" como se fosse um pacote padrão — isso não deve aparecer a menos que a pessoa peça especificamente por opções do sul da Itália.
+
 
 ---
 IRLANDA — SHANNON, CORK, DUBLIN (regra completa, seguir exatamente):
@@ -497,18 +525,11 @@ Sexta 25/06: Cerimônia de Casamento & Festa 💍
 Sábado 26/06: Pub e comemorações 🍺
 Domingo 27/06: Check-out e retorno ao Brasil
 
-Roteiro sugerido — casamento + sul da Itália (8 dias):
-Quarta 23/06: Embarque no Brasil
-Quinta 24/06: Chegada em Roma → Welcome Dinner
-Sexta 25/06: Casamento 💍
-Sábado 26/06: Pub 🍺
-Domingo 27/06: Check-out em Roma. Sugestão: trem rápido (1h15, €15-30) para Nápoles ou Sorrento para explorar o sul da Itália
-Segunda/Terça 28-29/06: Sul da Itália (a gosto)
-Quarta 30/06: Retorno ao Brasil
+Se a pessoa quiser ficar mais tempo (uma semana, por exemplo): não empurre um roteiro fixo — pergunte o que ela prefere: "Quer aproveitar pra conhecer Roma com mais calma, ou prefere dar uma escapadinha pra algum lugar por perto?" Só entre em detalhes do sul da Itália (Nápoles, Sorrento, Costa Amalfitana, Capri) SE a pessoa disser especificamente que quer isso — ver seção SUL DA ITÁLIA abaixo.
 
 IMPORTANTE: Hospedagem e alimentação nos 3 dias de festa (24, 25 e 26/06) são por conta dos noivos para os convidados com hospedagem inclusa. A partir de domingo 27/06, todos os custos são por conta do convidado.
 
-SUL DA ITÁLIA — SUGESTÕES (só se perguntarem, nunca impor):
+SUL DA ITÁLIA — SÓ MENCIONAR SE A PESSOA PEDIR EXPLICITAMENTE (nunca sugerir de forma proativa, nunca listar como parte de um "pacote" de viagem):
 Apresentar como opção para quem quiser estender a viagem — não é obrigatório nem esperado.
 
 Nápoles: cidade histórica e vibrante, berço da pizza. Trem de Roma em 1h15. Vale comer na L'Antica Pizzeria da Michele (do filme Comer, Rezar, Amar!).
@@ -677,11 +698,25 @@ def detect_subject_change(phone, assistant_text, user_message):
     whose phone number is texting. Looks for Aurora's own confirmation
     line ("Só para confirmar — você é **NAME**...") and, once the guest
     replies affirmatively, locks that name in as the active subject.
+
+    CRITICAL: the captured text is always resolved against the real guest
+    list before being accepted. Otherwise informal phrasing (e.g. a guest
+    typing "Im Larissa" and Aurora echoing that back) gets saved verbatim
+    as the "name" — which then matches no row in the spreadsheet at all,
+    so the RSVP silently never appears there despite everything reporting
+    success.
     """
     import re
     match = re.search(r"voc[eê] [eé]\s+\*\*(.+?)\*\*", assistant_text, re.IGNORECASE)
     if match:
-        pending_subject[phone] = match.group(1).strip()
+        raw_name = match.group(1).strip()
+        resolved = find_known_guest(raw_name)
+        if resolved:
+            pending_subject[phone] = resolved
+        else:
+            pending_subject[phone] = raw_name
+            import sys
+            print(f"SUBJECT WARNING: '{raw_name}' did not resolve to a known guest — saving as-is, may not match spreadsheet", file=sys.stderr)
         return
 
     lower_user = user_message.lower().strip()
@@ -852,40 +887,6 @@ PERSONAL_RSVP_KEYWORDS = [
 def wants_personal_rsvp(text):
     lower = text.lower()
     return any(k in lower for k in PERSONAL_RSVP_KEYWORDS)
-
-def find_known_guest(name):
-    """Fuzzy-match a name against the built-in guest list in the system prompt.
-    Returns the best-matching canonical name, or None."""
-    search = name.lower().strip()
-    # Full guest list extracted from SYSTEM_PROMPT at runtime — scan for name matches
-    import re as _re2
-    # Pull all names from the guest list sections in SYSTEM_PROMPT
-    candidates = _re2.findall(r'(?:^|\n)\s*([A-ZÀ-Ú][a-zà-úA-ZÀ-Ú\'\-]+(?: [A-ZÀ-Ú][a-zà-úA-ZÀ-Ú\'\-]+){0,3})', SYSTEM_PROMPT)
-    best = None
-    for c in candidates:
-        cname = c[0].strip()
-        if len(cname) < 3:
-            continue
-        if cname.lower() == search:
-            return cname
-        if search in cname.lower() or cname.lower() in search:
-            best = cname
-    return best
-
-def add_guest_to_sheet(guest_name, added_by="admin", notes=""):
-    """Log a new guest addition to the spreadsheet via the Apps Script webhook."""
-    payload = {
-        "type": "add_guest",
-        "data": {
-            "name": guest_name,
-            "added_by": added_by,
-            "notes": notes,
-            "timestamp": str(datetime.datetime.utcnow())
-        }
-    }
-    log_to_sheets("add_guest", payload["data"])
-    import sys
-    print(f"ADD GUEST: {guest_name}", file=sys.stderr)
 
 ADD_GUEST_KEYWORDS = ["adicionar", "adiciona", "add guest", "add to the list", "add to list",
                        "colocar na lista", "incluir na lista", "esquecemos", "we forgot"]
