@@ -699,15 +699,17 @@ def get_admin_response(phone_number, user_message):
         save_state()
         return "🔄 Tudo resetado! Conversas, RSVPs e dados de teste foram apagados. Pronto para recomeçar."
 
-    # --- Add a new guest to the spreadsheet ---
+    # --- Add a new guest to the spreadsheet (Larissa and Robert only) ---
     if any(k in lower_msg for k in ADD_GUEST_KEYWORDS):
+        if norm not in ("353833986529", "19292277546"):
+            return "Só a Larissa ou o Robert podem adicionar convidados à lista. 😊"
         candidate = extract_name_after_keyword(user_message, ADD_GUEST_KEYWORDS) or extract_capitalized_name(user_message)
         if candidate:
             existing = find_known_guest(candidate)
             if existing:
                 return f"'{existing}' já está na lista! Não precisa adicionar de novo. 😊"
-            add_guest_to_sheet(candidate)
-            return f"✅ Adicionei *{candidate}* à lista de convidados na planilha! Já pode confirmar presença dele(a) quando quiser."
+            add_guest_to_sheet(candidate, added_by=name)
+            return f"✅ Adicionei *{candidate}* à lista de convidados e na planilha! Já pode confirmar presença dele(a) quando quiser."
         return "Qual é o nome completo da pessoa que você quer adicionar? 😊"
 
     # --- Check if someone is on the list ---
