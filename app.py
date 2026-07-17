@@ -85,6 +85,14 @@ def load_state():
 load_state()
 
 ADMIN_NUMBERS = {"+353833986529", "+19292277546", "+393490541017"}
+ADMIN_NUMBERS_NORMALIZED = {n.lstrip("+") for n in ADMIN_NUMBERS}
+
+def normalize_phone(p):
+    return (p or "").replace("whatsapp:", "").replace(" ", "").replace("-", "").lstrip("+").strip()
+
+def is_admin_phone(p):
+    return normalize_phone(p) in ADMIN_NUMBERS_NORMALIZED
+
 LARISSA_NUMBER = "+353833986529"
 ROB_NUMBER = "+19292277546"
 CARLOTTA_NUMBER = "+393490541017"
@@ -178,7 +186,7 @@ Posso te ajudar com:
 🏨 Onde se hospedar
 👗 O que vestir em cada dia
 🍝 Restaurantes e dicas de Roma
-🛂 Passaporte (importante! me conta mais)
+🛂 Passaporte (se ainda não tiver, posso te ajudar a tirar)
 🚌 Transporte entre os eventos
 💰 Quanto dinheiro levar
 ❓ Qualquer dúvida sobre o casamento
@@ -560,7 +568,8 @@ def handle_broadcast(message_body, from_number, to_number):
     if upper.startswith("[ALL]"):
         msg = message_body[5:].strip()
         sent = 0
-        for phone in list(all_phones - ADMIN_NUMBERS):
+        for phone in list(all_phones):
+            if is_admin_phone(phone): continue
             try:
                 send_zapi_message(phone, f"📢 *Atualização do Casamento*\n\n{msg}")
                 sent += 1
@@ -569,7 +578,8 @@ def handle_broadcast(message_body, from_number, to_number):
     elif upper.startswith("[BRIDAL]"):
         msg = message_body[8:].strip()
         sent = 0
-        for phone in list(bridal_party_phones - ADMIN_NUMBERS):
+        for phone in list(bridal_party_phones):
+            if is_admin_phone(phone): continue
             try:
                 send_zapi_message(phone, f"💐 *Mensagem do Cortejo*\n\n{msg}")
                 sent += 1
@@ -588,12 +598,12 @@ def whatsapp_webhook():
     all_phones.add(phone_key)
     try:
         upper_msg = incoming_message.upper()
-        if phone_key in ADMIN_NUMBERS and (upper_msg.startswith("[ALL]") or upper_msg.startswith("[BRIDAL]")):
+        if is_admin_phone(phone_key) and (upper_msg.startswith("[ALL]") or upper_msg.startswith("[BRIDAL]")):
             reply = handle_broadcast(incoming_message, from_number, to_number)
             if reply:
                 send_whatsapp_message(from_number, reply, to_number)
                 return Response('', status=200)
-        if phone_key in ADMIN_NUMBERS:
+        if is_admin_phone(phone_key):
             reply = get_admin_response(phone_key, incoming_message)
         else:
             reply = get_aurora_response(phone_key, incoming_message)
@@ -662,9 +672,9 @@ def zapi_webhook():
         all_phones.add(phone)
 
         upper_msg = text.upper()
-        if phone in ADMIN_NUMBERS and (upper_msg.startswith('[ALL]') or upper_msg.startswith('[BRIDAL]')):
+        if is_admin_phone(phone) and (upper_msg.startswith('[ALL]') or upper_msg.startswith('[BRIDAL]')):
             reply = handle_broadcast_zapi(text, phone)
-        elif phone in ADMIN_NUMBERS:
+        elif is_admin_phone(phone):
             reply = get_admin_response(phone, text)
         else:
             reply = get_aurora_response(phone, text)
@@ -716,7 +726,8 @@ def handle_broadcast_zapi(message_body, from_phone):
     if upper.startswith("[ALL]"):
         msg = message_body[5:].strip()
         sent = 0
-        for phone in list(all_phones - ADMIN_NUMBERS):
+        for phone in list(all_phones):
+            if is_admin_phone(phone): continue
             try:
                 send_zapi_message(phone, f"📢 *Atualização do Casamento*\n\n{msg}")
                 sent += 1
@@ -725,7 +736,8 @@ def handle_broadcast_zapi(message_body, from_phone):
     elif upper.startswith("[BRIDAL]"):
         msg = message_body[8:].strip()
         sent = 0
-        for phone in list(bridal_party_phones - ADMIN_NUMBERS):
+        for phone in list(bridal_party_phones):
+            if is_admin_phone(phone): continue
             try:
                 send_zapi_message(phone, f"💐 *Mensagem do Cortejo*\n\n{msg}")
                 sent += 1
