@@ -23,6 +23,7 @@ rsvp_data = {}        # phone -> rsvp details
 all_phones = set()
 processing = set()
 processed_message_ids = set()  # track Z-API message IDs to prevent duplicates
+last_processed_time = {}  # phone -> timestamp of last processed message
 guest_flags = {}      # phone -> dict of flags (flights_booked, passport_done, accommodation_booked, rsvp_done)
 
 # ── ADMIN NUMBERS ──
@@ -221,15 +222,22 @@ FLUXO DE VERIFICAÇÃO DE RSVP:
 5. Se não encontrado: "Não encontrei [NOME] na nossa lista. Pode verificar a escrita? Vou avisar a Larissa para checar." → ALERTE A LARISSA IMEDIATAMENTE via WhatsApp com: nome informado, número de telefone, mensagem enviada.
 6. NUNCA confirme presença de alguém que não esteja na lista.
 
-PERGUNTAS DE RSVP (uma de cada vez):
+PERGUNTAS DE RSVP — REGRAS CRÍTICAS:
+- NUNCA faça mais de UMA pergunta por mensagem. Isso é obrigatório.
+- NUNCA repita uma pergunta que já foi feita na conversa.
+- NUNCA recomece o fluxo do zero se já está no meio — continue de onde parou.
+- Se a pessoa respondeu algo, registre e passe para a PRÓXIMA pergunta apenas.
+- Se a pessoa diz "confirmar" ou "sim" para dias, isso responde a pergunta dos dias — NÃO pergunte de novo.
+
+ORDEM DO RSVP (uma pergunta por vez, na ordem abaixo, sem pular nem repetir):
 1. Verificação do nome
-2. Vai comparecer?
-3. Quais dias? (Dia 1 — Vinícola 24/06 / Dia 2 — Casamento 25/06 / Dia 3 — Pub 26/06 / Os três)
-4. Verificação de acompanhante (veja regras acima)
+2. Vai comparecer? (sim/não)
+3. Quais dias? (Dia 1 Vinícola 24/06 / Dia 2 Casamento 25/06 / Dia 3 Pub 26/06 / Os três)
+4. Verificação de acompanhante
 5. Restrições alimentares? (vegetariano, vegano, alergia a nozes, sem carne vermelha, sem porco, alergia a frutos do mar, outra, nenhuma)
-6. Precisa de acesso sem escadas na igreja? "A entrada principal tem 124 degraus, mas há elevador disponível. Recomendamos especialmente para pessoas com mobilidade reduzida, grávidas e famílias com crianças pequenas."
-7. [Só para convidados PT] Precisa de ajuda com passaporte?
-8. Confirme todos os detalhes de forma acolhedora
+6. Precisa de acesso sem escadas na igreja? (124 degraus — elevador disponível. Recomendar para mobilidade reduzida, grávidas, famílias com crianças pequenas)
+7. [Só PT] Precisa de ajuda com passaporte?
+8. Confirmar TUDO de volta em UMA mensagem só, de forma acolhedora
 
 SISTEMA DE LEMBRETES INTELIGENTES:
 - Só lembre de algo que a pessoa JÁ CONFIRMOU que resolveu.
@@ -764,9 +772,20 @@ def zapi_webhook():
 
         print(f"Z-API: phone={phone} text={text}", file=sys.stderr)
 
+        # Prevent duplicate processing - both by active lock and time cooldown
         if phone in processing:
+            print(f"Z-API: phone {phone} already processing — skipping", file=sys.stderr)
             return Response('', status=200)
+
+        # 3-second cooldown per phone to catch Z-API double-fires
+        now = datetime.datetime.utcnow().timestamp()
+        last_time = last_processed_time.get(phone, 0)
+        if now - last_time < 3:
+            print(f"Z-API: phone {phone} in cooldown ({now - last_time:.1f}s) — skipping", file=sys.stderr)
+            return Response('', status=200)
+
         processing.add(phone)
+        last_processed_time[phone] = now
         all_phones.add(phone)
 
         upper_msg = text.upper()
