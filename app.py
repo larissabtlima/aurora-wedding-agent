@@ -54,7 +54,11 @@ processed_message_ids = set()
 last_processed_time = {}
 guest_flags = {}         # guest_name (lowercase) -> flags (rsvp_done, passport_done, etc)
 active_subject = {}      # phone -> name currently being RSVP'd on this phone
+active_companion = {}    # phone -> companion's name, when doing a COMBINED group RSVP (their answers get mirrored from the primary's, since combined questions can't be reliably split per-person from free text)
 pending_subject = {}     # phone -> name Aurora just asked to confirm, awaiting yes/no
+pending_group_second = {} # phone -> companion name pending confirmation alongside pending_subject, when Aurora's question named BOTH people at once
+pending_companion = {}   # phone -> new companion name Aurora just confirmed, awaiting yes/no
+pending_add_plusone = {} # phone -> newly-added guest's full name, awaiting yes/no on "does this person have a plus-one?"
 
 def _state_dict():
     return {
@@ -65,7 +69,11 @@ def _state_dict():
         "all_phones": list(all_phones),
         "guest_flags": guest_flags,
         "active_subject": active_subject,
+        "active_companion": active_companion,
         "pending_subject": pending_subject,
+        "pending_group_second": pending_group_second,
+        "pending_companion": pending_companion,
+        "pending_add_plusone": pending_add_plusone,
         "known_guest_names": KNOWN_GUEST_NAMES,
         "bridal_party_phones": list(bridal_party_phones),
     }
@@ -95,7 +103,11 @@ def load_state():
             all_phones = set(data.get("all_phones", []))
             guest_flags = data.get("guest_flags", {})
             active_subject = data.get("active_subject", {})
+            active_companion.update(data.get("active_companion", {}))
             pending_subject = data.get("pending_subject", {})
+            pending_group_second.update(data.get("pending_group_second", {}))
+            pending_companion.update(data.get("pending_companion", {}))
+            pending_add_plusone.update(data.get("pending_add_plusone", {}))
             for extra_name in data.get("known_guest_names", []):
                 if extra_name not in KNOWN_GUEST_NAMES:
                     KNOWN_GUEST_NAMES.append(extra_name)
@@ -214,10 +226,15 @@ def find_known_guest(name_query):
         else:
             overlap = len(set(q_tokens) & k_tokens)
         # Nickname/short-form fallback: e.g. "rob" should match "robert" —
-        # only for tokens 3+ letters, to avoid over-matching on short noise.
+        # but ONLY for genuinely short query tokens (3-4 letters), treating
+        # them as likely abbreviations/nicknames. A full-length name like
+        # "maria" (5 letters) must NOT prefix-match "mariana" — those are
+        # plausibly two different people, and doing so caused a real bug:
+        # a brand-new guest "Maria Fernandes" got rejected as a duplicate
+        # of the unrelated existing guest "Geovanine Mariana".
         if overlap == 0:
             for qt in q_tokens:
-                if len(qt) < 3:
+                if not (3 <= len(qt) <= 4):
                     continue
                 for kt in k_tokens:
                     if len(kt) >= 3 and (kt.startswith(qt) or qt.startswith(kt)):
@@ -261,11 +278,16 @@ def log_to_sheets(data_type, data):
         import sys
         print(f"SHEETS ERROR: {str(e)}", file=sys.stderr)
 
-def add_guest_to_sheet(name, added_by="admin", notes=""):
+def add_guest_to_sheet(name, added_by="admin", notes="", with_plus_one=False):
     origin = notes or f"Added via Aurora ({added_by})"
-    log_to_sheets("add_guest", {"name": name, "origin": origin})
+    log_to_sheets("add_guest", {"name": name, "origin": origin, "with_plus_one": with_plus_one})
     if name not in KNOWN_GUEST_NAMES:
         KNOWN_GUEST_NAMES.append(name)
+    if with_plus_one:
+        first_name = name.split()[0]
+        placeholder = f"Guest ({first_name})"
+        if placeholder not in KNOWN_GUEST_NAMES:
+            KNOWN_GUEST_NAMES.append(placeholder)
     save_state()
 
 def alert_larissa(message):
@@ -370,10 +392,14 @@ LISTA DO ROB (EN): Robert Daly, Larissa Daly, Michael Daly, Mary Daly, Christoph
 
 LISTA DA LARISSA (PT salvo indicação): Laura Teixeira, Anna Laura Teixeira, Fabiano Lima, Jhenifer Bering (acompanhante de Fabiano), Alexia Lima (família de Fabiano), Meira Lima, Kelly Cristina, Igor Lima (acompanhante de Kelly), Milâine Aparecida (acompanhante de Kelly), Jadeilson Lima, Renato Lima, Leonardo Lima, Guest (acompanhante de Leonardo), Geovanine Mariana, Douglas (acompanhante de Geovanine), Aline Mariana, Rafael Azevedo (acompanhante de Aline Mariana), Athila Mariano, Lucinha Mendes, Nalva Mendes (acompanhante de Lucinha), Leidy Mendes, Guest (acompanhante de Leidy), Daiana Ribeiro, Silvio (acompanhante de Daiana), Gabriel (família de Daiana), Lindinalva Batista, Roberto Batista (acompanhante de Lindinalva), Malu Teixeira, Toninho Teixeira, Angel Gabriel, Wesley Muniesa (acompanhante de Angel), Laisa Teixeira, Guilherme (acompanhante de Laisa), Talles Guilherme, Maria Fernanda (acompanhante de Talles), Wigney Teixeira, Izabel Teixeira, Saide Alves (acompanhante de Izabel), Bruna Alves, Roger Boorges (acompanhante de Bruna), Hyago Alves, Maria Clara (acompanhante de Hyago), Andre da Silva, Camila Campos, Debora Araújo, Thaíse Silva, Hugo Lopes (acompanhante de Thaíse), Aline Olden, Guest (acompanhante de Aline Olden), Thaís Rebuá [EN], Richard Hoey (acompanhante de Thaís) [EN], Róisín O'Brien [EN], Ameer Gazder (acompanhante de Roisin) [EN], Elisha Bernie [EN], Guest (acompanhante de Elisha) [EN], Eimear Flaherty [EN], Islam Erkale (acompanhante de Eimear) [EN], Carly Hochhauser [EN], Mathew Hutton [EN], Jaya Patel [EN], Guest (acompanhante de Jaya) [EN], Wai Mun [EN], Jhon (acompanhante de Wai) [EN], Eduarda Santana [EN], Mark Donnelly (acompanhante de Eduarda) [EN], Haydee Matos, Guest (acompanhante de Haydee), Kevin O Dwyer [EN], Guest (acompanhante de Kevin O Dwyer) [EN], Paola Gomes, Jackson Ferreira (acompanhante de Paola), Cian Whyte [EN], Guest (acompanhante de Cian Whyte) [EN], Warley Ferreira, Ricardo Santos (acompanhante de Warley), James Roche [EN], Kate Roche (acompanhante de James Roche) [EN], Ana Luiza [EN], Guest (acompanhante de Ana) [EN], Andre Villa, Priscilla Figueiredo (acompanhante de Andre Villa), Andrew Bolton [EN], Guest (acompanhante de Bolton) [EN], Elen Weber [EN], Guest (acompanhante de Elen) [EN], Tay Vieira [EN], Guest (acompanhante de Tay) [EN], Rafeela, Leo (acompanhante de Rafeela), Stephanie Marques, Ingrid Mariano [EN], Sean O Sullivan [EN], Diego Alcantara, Alexia Gouveia, Algarve (acompanhante de Alexia Gouveia)
 
-CONVIDADOS COM HOSPEDAGEM INCLUSA: Laura Teixeira, Anna Laura Teixeira, Fabiano Lima, Jhenifer Bering, Alexia Lima, Meira Lima, Kelly Cristina, Igor Lima, Milâine Aparecida, Jadeilson Lima, Leonardo Lima, Angel Gabriel, Wesley Muniesa, Bruna Alves, Roger Boorges, Hyago Alves, Maria Clara, Andre da Silva, Camila Campos, Debora Araújo
+CONVIDADOS COM HOSPEDAGEM INCLUSA (noivos PAGAM tudo): Laura Teixeira, Anna Laura Teixeira, Fabiano Lima, Jhenifer Bering, Alexia Lima, Meira Lima, Kelly Cristina, Igor Lima, Milâine Aparecida, Jadeilson Lima, Leonardo Lima, Angel Gabriel, Wesley Muniesa, Bruna Alves, Roger Boorges, Hyago Alves, Maria Clara, Andre da Silva, Camila Campos, Debora Araújo
 ⚠️ REGRA EXATA DE DATAS — CRÍTICO, NÃO ERRAR: A hospedagem inclusa cobre as noites de QUARTA (23/06), QUINTA (24/06), SEXTA (25/06) e SÁBADO (26/06), com check-out no DOMINGO (27/06) de manhã. Isso é 4 noites cobertas.
 Se alguém quiser ficar além do domingo, TODAS as noites a partir de domingo (27/06 em diante) são por conta própria. Exemplo: se a pessoa quer ficar até terça (29/06), ela paga por conta própria as noites de DOMINGO (27/06) e SEGUNDA (28/06) — check-out terça de manhã. Sempre conte as noites extras a partir de domingo, nunca antes disso.
 Quando perguntarem: "Sua hospedagem já está inclusa! 🏨 Cobrimos as noites de quarta a sábado (23 a 26/06), com check-out domingo de manhã (27/06). Se quiser ficar mais tempo, as noites extras a partir de domingo são por sua conta — só avisar o hotel."
+
+CONVIDADOS COM HOSPEDAGEM ORGANIZADA (mas NÃO paga pelos noivos): Michael Daly, Mary Daly, Christopher Daly, Thomas O Brien, Kornel Cwiklinski, Alan Cwiklinski, Patryk Wesolowski, Natalie, Linda Cahill, Conor Cahill, Cathy Cahill, Ayla Cahill, Avean Cahill, Caera Cahill, Will Daly, Ezgi Atakul, Brendan Daly, Deirdre Daly, Chris Daly, Guest (Chris)
+⚠️ IMPORTANTE — como explicar isso: os noivos estão negociando um preço de grupo com os hotéis pra esse grupo (a família do Robert), pra facilitar a vida de todo mundo — mas o CUSTO da hospedagem é por conta de cada um. Explique assim se perguntarem: "A gente tá organizando um preço especial de grupo pra vocês nos hotéis — assim que fechar, te passamos o valor e o contato pra reservar. É só combinar com o Robert quando estiver pronto!" NUNCA mencione que outros convidados (do Brasil) têm a hospedagem paga pelos noivos — isso é uma informação privada entre os noivos e esses convidados específicos, não deve ser comparado ou mencionado para ninguém de fora desse grupo.
+Se alguém desse grupo perguntar "vocês estão pagando minha hospedagem?", responda com honestidade mas sem comparar com outros: "Essa hospedagem é por sua conta, mas estamos negociando um preço de grupo bem melhor pra vocês! Assim que tivermos os detalhes, o Robert compartilha com vocês."
 
 RSVP EM GRUPO: Linda Cahill = principal de Conor, Cathy, Ayla, Avean, Caera Cahill. Mossie Mc Donnell = principal de Gaye e Julie. Ofereça confirmar todos juntos.
 
@@ -389,39 +415,54 @@ PERGUNTAS DE RSVP — REGRAS CRÍTICAS:
 CONFIRMAÇÃO DE NOME — REGRA CRÍTICA:
 Ao confirmar quem é o convidado, SEMPRE use o NOME COMPLETO exatamente como está na lista de convidados, em **negrito** (ex: "**Larissa Daly**", nunca só "Larissa"). O nome completo é usado para organizar os lugares na recepção — é essencial. NUNCA confirme ou registre apenas o primeiro nome.
 
-ACOMPANHANTE (+1) — REGRA CRÍTICA:
-Assim que identificar quem é o convidado (logo no início do RSVP, antes até da pergunta "vai comparecer?"), verifique se essa pessoa tem um acompanhante listado. Se tiver, avise IMEDIATAMENTE e de forma proativa: "Vi aqui que você tem um acompanhante — **[nome do acompanhante]**! Quer confirmar a presença dele(a) também agora, ou prefere fazer isso depois, separadamente?" Nunca espere a pessoa perguntar "eu tenho +1?" — isso deveria vir de Aurora.
-Se a pessoa disser "depois", tudo bem — o RSVP principal continua normalmente sem travar nisso, e o acompanhante pode ser confirmado em qualquer conversa futura.
+ACOMPANHANTE (+1) — RSVP EM GRUPO, REGRA CRÍTICA:
+Assim que identificar quem é o convidado (logo no início do RSVP), verifique se essa pessoa tem um acompanhante listado.
+
+CASO A — o acompanhante JÁ TEM nome próprio na lista (ex: "Jhenifer Bering"): avise assim, colocando as DUAS pessoas em negrito na MESMA mensagem — isso é essencial pro sistema registrar o RSVP em dupla corretamente: "Vi aqui que **[Nome Completo do convidado principal]** tem um acompanhante — **[Nome Completo do acompanhante]**! Vou fazer o RSVP dos dois juntos, tá bom? Assim é bem mais rápido." (as DUAS pessoas SEMPRE em negrito juntas nessa mensagem específica de confirmação)
+
+CASO B — o acompanhante ainda é só "Guest" (sem nome próprio cadastrado): avise assim, com só o nome do convidado principal em negrito: "Vi aqui que você tem um acompanhante, mas ainda não temos o nome dele(a) cadastrado! Qual é o nome completo?" (ver regra NOME DO ACOMPANHANTE abaixo pra continuar esse fluxo)
+
+Se a pessoa preferir fazer separado ou "depois", tudo bem — respeite, e faça o RSVP normal só da pessoa principal.
+⚠️ SE O RSVP FOR EM DUPLA/GRUPO (Caso A confirmado, ou Caso B depois que o nome for capturado): a partir daqui, TODAS as perguntas seguintes (dias, dieta, elevador) devem ser feitas UMA VEZ SÓ, cobrindo as DUAS (ou mais) pessoas ao mesmo tempo — nunca repita a pergunta pessoa por pessoa. Exemplos de como perguntar:
+"Vocês dois vão nos três dias, ou só em alguns?"
+"Algum de vocês tem restrição alimentar? (vegetariano, vegano, alergia a nozes, não come carne vermelha, não come porco, alergia a frutos do mar, ou nenhuma)"
+"Algum dos dois vai precisar do elevador na cerimônia?"
+Se as respostas forem diferentes entre as duas pessoas (ex: um vai só 2 dias, o outro os 3), pergunte especificamente pra esclarecer e registre CADA resposta separadamente para a pessoa certa — só a PERGUNTA é feita junta, os DADOS continuam sendo de cada um individualmente.
+Isso vale pra grupos maiores também (3, 4+ pessoas) — sempre uma pergunta cobrindo todo o grupo de uma vez, nunca repetindo pessoa por pessoa. Isso evita que alguém com vários acompanhantes tenha que responder a mesma pergunta várias vezes.
+
+NOME DO ACOMPANHANTE SEM NOME CADASTRADO — REGRA CRÍTICA:
+Se o acompanhante aparece na lista só como "Guest" (sem nome próprio, ex: "Guest (Corey)"), pergunte o nome completo dele(a) durante o RSVP: "Qual é o nome completo do seu acompanhante, pra eu atualizar na nossa lista?"
+Assim que souber o nome, confirme desta forma EXATA (importante pro sistema registrar certo): "Perfeito! O nome do seu acompanhante é **[Nome Completo]**, correto?"
 NUNCA ofereça ou pergunte sobre acompanhante para quem não tem um listado claramente na lista (marcado como "acompanhante de", "Guest", ou nome próprio ao lado). Se a pessoa NÃO tem acompanhante listado, não toque nesse assunto.
 Se mesmo assim a pessoa pedir um acompanhante que não está na lista, diga algo como: "Essa pessoa não está na nossa lista no momento, mas vou perguntar para a Larissa e te aviso, tá? 💕" — e não prometa nada além disso.
 
 DIAS DO EVENTO — OBRIGATÓRIO SER EMPOLGANTE, SEM EXCEÇÃO:
-Isso não é opcional nem uma sugestão — TODA VEZ que perguntar quais dias a pessoa vai comparecer, é OBRIGATÓRIO contar o programa completo de forma animada ANTES de perguntar. Nunca pergunte só "vai nos 3 dias?" secamente. Use sempre esta estrutura (adapte o idioma, mas mantenha o conteúdo e o entusiasmo):
+Isso não é opcional nem uma sugestão — TODA VEZ que perguntar quais dias a pessoa (ou o grupo) vai comparecer, é OBRIGATÓRIO contar o programa completo de forma animada ANTES de perguntar. Nunca pergunte só "vai nos 3 dias?" secamente. Use sempre esta estrutura (adapte o idioma, mas mantenha o conteúdo e o entusiasmo):
 "Vai ser incrível! 🎉 Aqui está nosso programa:
 🍷 Dia 1 (24/06): Vamos passar a tarde numa vinícola linda perto de Roma — aula de culinária, degustação de vinhos, tudo ao ar livre!
 💍 Dia 2 (25/06): O grande dia! Cerimônia às 15h numa basílica histórica no coração de Roma, seguida de recepção incrível numa villa com vista pra cidade.
 🍺 Dia 3 (26/06): Dia de relaxar juntos num pub irlandês, com boa comida e bebida — perfeito pra recuperar do dia anterior!
-Você vai nos três dias, ou só em alguns?"
-Isso vale sempre — inclusive quando a MESMA conversa tem RSVPs de PESSOAS DIFERENTES (ex: Larissa confirmando ela mesma e depois a Anna): cada nova pessoa recebe o texto animado completo de novo, já que é a primeira vez que ELA está ouvindo. Isso não conta como "repetir uma pergunta" (essa regra é sobre não perguntar a MESMA coisa duas vezes pra MESMA pessoa).
+Vocês vão nos três dias, ou só em alguns?" (ajustar "vocês/você" conforme for grupo ou pessoa só)
+Isso vale sempre — inclusive quando a MESMA conversa tem RSVPs de PESSOAS/GRUPOS DIFERENTES (ex: Larissa confirmando ela mesma e depois a Anna): cada nova pessoa ou grupo recebe o texto animado completo de novo. Isso não conta como "repetir uma pergunta" (essa regra é sobre não perguntar a MESMA coisa duas vezes pro MESMO grupo).
 
 RESTRIÇÕES ALIMENTARES:
-Ao perguntar, SEMPRE liste todas as opções: vegetariano, vegano, alergia a nozes, não come carne vermelha, não come porco, alergia a frutos do mar, ou nenhuma restrição.
+Ao perguntar, SEMPRE liste todas as opções: vegetariano, vegano, alergia a nozes, não come carne vermelha, não come porco, alergia a frutos do mar, ou nenhuma restrição. Se for RSVP em grupo, perguntar cobrindo todos de uma vez (ver regra ACOMPANHANTE acima).
 
 ELEVADOR NA IGREJA — REGRA CRÍTICA:
 Pergunte de forma neutra, sem assumir que a pessoa já sabe do assunto — sempre explique rapidinho antes de perguntar, tipo: "Uma coisa sobre a cerimônia: são 124 degraus pra subir na basílica. Tem elevador disponível pra quem realmente precisa (mobilidade reduzida, gravidez, crianças de colo). Você vai precisar do elevador ou consegue subir as escadas numa boa?"
-O elevador é reservado APENAS para quem realmente tem dificuldade de mobilidade, está grávida, ou tem crianças pequenas de colo — mas pergunte de forma acolhedora, não como se fosse óbvio ou repetitivo.
+O elevador é reservado APENAS para quem realmente tem dificuldade de mobilidade, está grávida, ou tem crianças pequenas de colo — mas pergunte de forma acolhedora, não como se fosse óbvio ou repetitivo. Se for grupo, perguntar cobrindo todos de uma vez.
 
 PASSAPORTE — REGRA CRÍTICA DE IDIOMA:
 SÓ ofereça ajuda com passaporte se a conversa estiver em PORTUGUÊS. NUNCA ofereça ou mencione ajuda com passaporte para convidados falando em inglês — esse suporte é exclusivo para convidados brasileiros que precisam tirar passaporte para viajar. Se a conversa é em português E a pessoa está na LISTA DA LARISSA (ou claramente é brasileira), ofereça na etapa de passaporte do RSVP (ver ORDEM DO RSVP abaixo).
 
-ORDEM DO RSVP (uma pergunta por vez):
-1. Verificação do nome → confirmar o NOME COMPLETO exatamente como na lista, em negrito. Se a pessoa tem acompanhante listado, avisar aqui (ver regra ACOMPANHANTE acima).
-2. Vai comparecer?
-3. Quais dias? (SEMPRE usar o texto animado obrigatório acima antes de perguntar)
-4. Restrições alimentares? (listar todas as opções)
-5. Elevador na igreja? (explicar antes de perguntar, tom acolhedor)
-6. [Só se em português E brasileiro] Ajuda com passaporte?
-7. Confirmar tudo em UMA mensagem acolhedora, usando o NOME COMPLETO — este é o passo final, o RSVP só está completo depois desta mensagem
+ORDEM DO RSVP (uma pergunta por vez, cobrindo o grupo inteiro em cada pergunta quando aplicável):
+1. Verificação do nome → confirmar o NOME COMPLETO exatamente como na lista, em negrito. Se a pessoa tem acompanhante listado, avisar aqui e propor fazer junto (ver regra ACOMPANHANTE acima). Se o acompanhante não tem nome cadastrado, pedir o nome completo dele(a) aqui também.
+2. Vai(ão) comparecer?
+3. Quais dias? (SEMPRE usar o texto animado obrigatório acima antes de perguntar, cobrindo o grupo)
+4. Restrições alimentares? (listar todas as opções, cobrindo o grupo)
+5. Elevador na igreja? (explicar antes de perguntar, tom acolhedor, cobrindo o grupo)
+6. [Só se em português E brasileiro] Ajuda com passaporte? (perguntar a cada pessoa do grupo que seja brasileira)
+7. Confirmar tudo em UMA mensagem acolhedora, usando o(s) NOME(S) COMPLETO(S) de todos que foram confirmados — este é o passo final, o RSVP só está completo depois desta mensagem
 8. Logo após confirmar, SEMPRE enviar um checklist do que falta resolver: 🛂 Passaporte (se brasileiro), 🏨 Hospedagem, ✈️ Voos — perguntando o status de cada item e oferecendo ajuda com o próximo passo.
 
 NUNCA confirme presença de quem não está na lista → alerte Larissa imediatamente.
@@ -473,7 +514,10 @@ ACESSIBILIDADE: Se alguém precisar de qualquer acomodação de acessibilidade (
 PRAZO DE RSVP: Pedimos confirmação de presença até o final de janeiro de 2027. Se alguém perguntar o prazo, informar essa data. Se passar de janeiro e a pessoa ainda não confirmou, incentivar gentilmente a confirmar o quanto antes.
 
 HOTÉIS RECOMENDADOS:
-⚠️ IMPORTANTE: Ninguém tem quarto reservado ainda — nem mesmo os convidados com hospedagem inclusa. A Larissa vai reservar os quartos DEPOIS que a pessoa confirmar presença no RSVP, e só depois manda os detalhes. NUNCA assuma ou pergunte "você vai ficar no Hotel X?" como se já estivesse decidido — diga que ainda não está reservado.
+⚠️ QUEM RESERVA O QUARTO — REGRA CRÍTICA, NÃO ERRAR:
+A Larissa SÓ reserva o quarto para quem está na lista "CONVIDADOS COM HOSPEDAGEM INCLUSA" (hospedagem paga pelos noivos) — e mesmo assim, só DEPOIS que a pessoa confirmar presença no RSVP.
+Para TODOS os outros (incluindo o grupo "HOSPEDAGEM ORGANIZADA"), a reserva é responsabilidade do PRÓPRIO convidado — os noivos só negociam o preço de grupo e passam o contato do hotel, mas quem reserva e paga é a pessoa.
+NUNCA diga "a Larissa pode reservar pra você" para alguém que não está na lista de hospedagem inclusa — isso está errado. Para esses casos, diga: "Assim que tivermos o preço de grupo fechado, te passamos o contato do hotel pra você reservar diretamente!"
 Estes 3 hotéis abaixo são os mais próximos da cerimônia E com preço mais acessível dentro do que conseguimos negociar — ainda estamos finalizando os acordos finais (preços de grupo, café da manhã):
 Hotel Hiberia ⭐⭐⭐⭐ €170-260/noite | https://www.hotelhiberia.it | 7min Aracoeli
 Hotel Regno ⭐⭐⭐⭐ €180-300/noite | https://www.hotelregno.com | 8min Aracoeli
@@ -758,6 +802,17 @@ def detect_subject_change(phone, assistant_text, user_message):
                 resolved_names.append(match)
         if len(resolved_names) == 1:
             pending_subject[phone] = resolved_names[0]
+            pending_group_second.pop(phone, None)
+            return
+        if len(resolved_names) == 2:
+            # Aurora is confirming a COMBINED group RSVP (e.g. "vou fazer o
+            # RSVP de **Fabiano Lima** e **Jhenifer Bering** juntos, tá?").
+            # Track both — see extract_rsvp_from_response, which mirrors
+            # shared-question answers (days/dietary/elevator) onto BOTH
+            # people once this is confirmed, so the companion actually
+            # gets data instead of being silently dropped.
+            pending_subject[phone] = resolved_names[0]
+            pending_group_second[phone] = resolved_names[1]
             return
 
     lower_user = user_message.lower().strip()
@@ -766,6 +821,7 @@ def detect_subject_change(phone, assistant_text, user_message):
     negative = lower_user in ("não", "nao", "no", "não.", "nao.", "no.") or lower_user.startswith(("não,", "nao,", "no,"))
     if negative and phone in pending_subject:
         pending_subject.pop(phone, None)
+        pending_group_second.pop(phone, None)
         return
 
     affirmative = any(w in lower_user for w in ["sim", "yes", "isso", "correto", "certo", "exato"])
@@ -775,9 +831,69 @@ def detect_subject_change(phone, assistant_text, user_message):
             import sys
             print(f"SUBJECT CHANGE: phone={phone} old='{active_subject.get(phone)}' new='{new_name}'", file=sys.stderr)
             active_subject[phone] = new_name
+        if phone in pending_group_second:
+            active_companion[phone] = pending_group_second.pop(phone)
+            import sys
+            print(f"GROUP COMPANION SET: phone={phone} companion='{active_companion[phone]}'", file=sys.stderr)
+        else:
+            # Switching to a solo RSVP clears any leftover companion from
+            # a previous group, so their data doesn't get mirrored onto
+            # someone new by mistake.
+            active_companion.pop(phone, None)
+
+def rename_placeholder_guest(primary_full_name, real_companion_name):
+    """When a guest's plus-one only exists in the spreadsheet as a
+    placeholder row ('Guest (Corey)'), and the real name is captured
+    during the RSVP, this renames that row to the real name instead of
+    leaving 'Guest' in the sheet or creating a duplicate row."""
+    primary_first_name = primary_full_name.split()[0]
+    log_to_sheets("rename_guest", {
+        "primary_first_name": primary_first_name,
+        "new_name": real_companion_name
+    })
+    if real_companion_name not in KNOWN_GUEST_NAMES:
+        KNOWN_GUEST_NAMES.append(real_companion_name)
+    import sys
+    print(f"RENAME GUEST: Guest ({primary_first_name}) -> {real_companion_name}", file=sys.stderr)
+
+def detect_companion_name(phone, assistant_text, user_message):
+    """
+    Captures a plus-one's real name when they only exist in the guest
+    list as an unnamed placeholder ("Guest (Corey)"). Relies on Aurora
+    using the exact confirmation phrasing instructed in the system prompt
+    ("O nome do seu acompanhante é **X**, correto?") since a brand-new
+    name can't be resolved against the known guest list the way subject
+    detection does — there's nothing to fuzzy-match against yet.
+    """
+    import re
+    if "acompanhante" in assistant_text.lower() and "?" in assistant_text:
+        bolded = re.findall(r"\*\*(.+?)\*\*", assistant_text)
+        # Exactly one bolded name, and it's NOT already a known guest —
+        # that combination means this is a brand-new companion name.
+        # Uses a STRICT exact-match check here (not find_known_guest's
+        # fuzzy matching) — fuzzy matching would wrongly treat a genuinely
+        # new name like "Anna Silva" as already-known just because it
+        # shares a first name with an existing different guest ("Anna
+        # Laura Teixeira"), which was a real bug found by testing this.
+        if len(bolded) == 1:
+            candidate_name = bolded[0].strip()
+            already_known = any(g.lower() == candidate_name.lower() for g in KNOWN_GUEST_NAMES)
+            if not already_known:
+                pending_companion[phone] = candidate_name
+                return
+
+    lower_user = user_message.lower().strip()
+    affirmative = any(w in lower_user for w in ["sim", "yes", "isso", "correto", "certo", "exato"])
+    if affirmative and phone in pending_companion:
+        companion_name = pending_companion.pop(phone)
+        primary_name = active_subject.get(phone)
+        if primary_name:
+            rename_placeholder_guest(primary_name, companion_name)
+            active_companion[phone] = companion_name
 
 def extract_rsvp_from_response(phone, response_text, user_message):
     detect_subject_change(phone, response_text, user_message)
+    detect_companion_name(phone, response_text, user_message)
 
     subject_name = active_subject.get(phone) or phone_registry.get(phone) or "unknown"
     key = subject_name.lower().strip()
@@ -799,11 +915,37 @@ def extract_rsvp_from_response(phone, response_text, user_message):
     if key not in guest_flags:
         guest_flags[key] = {}
 
-    if any(w in lower for w in ["yes", "sim", "vou comparecer", "vou sim", "com certeza que vou", "presença confirmada", "confirmo minha presença", "confirmo a presença"]):
-        if not any(w in lower for w in ["not attending", "não vou", "unable", "não poderei", "não consigo", "infelizmente não"]):
+    # Disambiguate bare "sim"/"não" — these are the natural short answer to
+    # ANY yes/no question in the flow (name confirmation, attendance,
+    # elevator, companion name), not just attendance specifically. Using
+    # them as attendance signals unconditionally caused a serious bug:
+    # someone declining with a bare "não" stayed recorded as attending=yes,
+    # because an earlier unrelated "sim" (e.g. confirming their own name)
+    # had already set it, and bare "não" doesn't match any of the longer
+    # "not attending" phrases needed to override it.
+    # Fix: only let a BARE sim/não decide attendance when Aurora's own
+    # PREVIOUS message was actually asking about attendance. Unambiguous
+    # full phrases ("vou comparecer", "não vou", "infelizmente não posso")
+    # still work regardless of context, since those can't mean anything else.
+    history = conversations.get(phone, [])
+    previous_assistant_text = ""
+    if len(history) >= 3:
+        previous_assistant_text = str(history[-3].get("content", "")).lower()
+    asking_attendance_now = any(w in previous_assistant_text for w in [
+        "comparecer", "vai vir", "vão comparecer", "will you attend",
+        "will you be attending", "you both attending", "attending the wedding"
+    ])
+    bare_sim = lower.strip() in ("sim", "sim.", "yes", "yes.")
+    bare_nao = lower.strip() in ("não", "nao", "não.", "nao.", "no", "no.")
+
+    unambiguous_yes = any(w in lower for w in ["vou comparecer", "vou sim", "com certeza que vou", "presença confirmada", "confirmo minha presença", "confirmo a presença"])
+    unambiguous_no = any(w in lower for w in ["not attending", "can't make", "unable", "não vou", "não poderei", "não consigo", "infelizmente não"])
+
+    if unambiguous_yes or (bare_sim and asking_attendance_now):
+        if not unambiguous_no:
             rsvp_data[key]["attending"] = "yes"
             guest_flags[key]["rsvp_done"] = True
-    if any(w in lower for w in ["not attending", "can't make", "unable", "não vou", "não poderei", "não consigo", "infelizmente não posso"]):
+    if unambiguous_no or (bare_nao and asking_attendance_now):
         rsvp_data[key]["attending"] = "no"
         guest_flags[key]["rsvp_done"] = True
 
@@ -813,6 +955,13 @@ def extract_rsvp_from_response(phone, response_text, user_message):
         guest_flags[key]["passport_done"] = True
     if any(w in lower for w in ["hotel reservado", "já reservei", "hospedagem feita", "booked hotel"]):
         guest_flags[key]["accommodation_booked"] = True
+
+    # Elevator need — Larissa has no other way to find out about this, so
+    # alert her directly the moment it's mentioned (once per guest).
+    if any(w in lower for w in ["preciso do elevador", "vou precisar do elevador", "elevador sim", "sim, elevador", "preciso de elevador", "need the elevator", "i'll need the elevator"]):
+        if not guest_flags[key].get("elevator_alerted"):
+            guest_flags[key]["elevator_alerted"] = True
+            alert_larissa(f"🛗 *{subject_name}* vai precisar do elevador na igreja no dia do casamento (25/06). Já pode providenciar!")
 
     # STICKY flags: only set to True when mentioned. Never reset to False on a
     # later turn just because that turn's message doesn't repeat the word —
@@ -859,7 +1008,15 @@ def extract_rsvp_from_response(phone, response_text, user_message):
         rsvp_data[key]["days"] = days
 
     rsvp_data[key]["name"] = subject_name
-    rsvp_data[key]["phone"] = phone
+    # CRITICAL: only stamp the sender's own phone here if this RSVP is for
+    # THEMSELVES. Otherwise (RSVPing on behalf of someone else) this field
+    # must stay untouched — sending it unconditionally was the exact bug
+    # that put the sender's own phone number on other guests' rows.
+    sender_identity = phone_registry.get(phone)
+    if sender_identity and sender_identity.lower().strip() == key:
+        rsvp_data[key]["phone"] = phone
+    else:
+        rsvp_data[key].pop("phone", None)
 
     import sys
     print(f"RSVP EXTRACT: key='{key}' subject='{subject_name}' attending={rsvp_data[key].get('attending')} days={rsvp_data[key].get('days')} dietary={rsvp_data[key].get('dietary')}", file=sys.stderr)
@@ -867,6 +1024,45 @@ def extract_rsvp_from_response(phone, response_text, user_message):
     if rsvp_data[key].get("attending") and rsvp_data[key].get("name"):
         print(f"RSVP SHEET WRITE: sending '{subject_name}' to Sheets webhook", file=sys.stderr)
         log_to_sheets("rsvp", rsvp_data[key])
+
+    # GROUP RSVP MIRRORING: if this RSVP is being done as a combined pair
+    # (active_companion set), mirror the SHARED-QUESTION flags (attending,
+    # days, dietary, elevator) onto the companion's own entry too. This is
+    # necessarily an approximation — a single combined answer can't be
+    # reliably split per-person from free text — so it assumes both people
+    # gave the same answer, which covers the common case. If their answers
+    # actually differed, Aurora's system prompt instructs her to call that
+    # out explicitly rather than let this silent copy be the only record.
+    #
+    # SAFETY NET: if the message itself signals a SPLIT answer (e.g. "eu
+    # vou os 3 dias mas ela só vai no dia 2"), skip the auto-mirror rather
+    # than silently copying a wrong answer onto the companion — confirmed
+    # via testing that keyword extraction can't reliably split this, so
+    # it's safer to leave the companion's entry untouched and let Larissa
+    # know a manual check is needed than to record a plausibly-wrong value.
+    split_answer_signals = ["mas ela", "mas ele", "mas eu", "só ela", "só ele", "ela só",
+                            "ele só", "different", "diferente", "but she", "but he"]
+    looks_split = any(s in lower for s in split_answer_signals)
+
+    companion_name = active_companion.get(phone)
+    if companion_name and companion_name.lower().strip() != key:
+        comp_key = companion_name.lower().strip()
+        if looks_split:
+            print(f"GROUP MIRROR SKIPPED (split-answer signal detected): '{companion_name}' NOT auto-updated from '{subject_name}' — message: {user_message!r}", file=sys.stderr)
+            alert_larissa(f"⚠️ *{subject_name}* e *{companion_name}* parecem ter dado respostas diferentes no RSVP em dupla — confira manualmente na planilha, não atualizei automaticamente pra não errar.")
+        else:
+            if comp_key not in rsvp_data:
+                rsvp_data[comp_key] = {}
+            if comp_key not in guest_flags:
+                guest_flags[comp_key] = {}
+            for flag in ["attending", "days", "dietary", "dietary_vegetarian", "dietary_vegan",
+                         "dietary_nut_allergy", "dietary_no_beef", "dietary_no_pork", "dietary_shellfish"]:
+                if flag in rsvp_data[key]:
+                    rsvp_data[comp_key][flag] = rsvp_data[key][flag]
+            rsvp_data[comp_key]["name"] = companion_name
+            print(f"GROUP MIRROR: '{companion_name}' <- mirrored from '{subject_name}'", file=sys.stderr)
+            if rsvp_data[comp_key].get("attending") and rsvp_data[comp_key].get("name"):
+                log_to_sheets("rsvp", rsvp_data[comp_key])
 
     save_state()
 
@@ -879,7 +1075,8 @@ def get_aurora_response(phone_number, user_message):
         system=SYSTEM_PROMPT,
         messages=messages
     )
-    assistant_message = sanitize_for_whatsapp(response.content[0].text)
+    raw_text = response.content[0].text
+    assistant_message = sanitize_for_whatsapp(raw_text)
     add_to_conversation(phone_number, "assistant", assistant_message)
 
     if phone_number not in phone_registry:
@@ -890,7 +1087,7 @@ def get_aurora_response(phone_number, user_message):
                 bridal_party_phones.add(phone_number)
                 break
 
-    extract_rsvp_from_response(phone_number, assistant_message, user_message)
+    extract_rsvp_from_response(phone_number, raw_text, user_message)
 
     subject_name = active_subject.get(phone_number)
     sender_name = phone_registry.get(phone_number)
@@ -1068,13 +1265,37 @@ def get_admin_response(phone_number, user_message):
     name = ADMIN_IDENTITY.get(norm, "Carlotta (wedding planner)")
     lower_msg = user_message.lower()
 
+    # --- Handle a pending "does this new guest have a plus-one?" reply.
+    # Checked BEFORE the RESET/ADD_GUEST keyword checks below, since a bare
+    # "sim"/"não" reply wouldn't match any of those keywords and would
+    # otherwise fall through unrecognized. Also expires itself if the next
+    # message isn't a clear yes/no, rather than lingering indefinitely and
+    # risking a later unrelated "sim" being wrongly consumed here. ---
+    if phone_number in pending_add_plusone:
+        lower_reply = user_message.lower().strip()
+        is_yes = lower_reply in ("sim", "yes", "sim.", "yes.") or lower_reply.startswith(("sim,", "yes,"))
+        is_no = lower_reply in ("não", "nao", "no", "não.", "nao.", "no.") or lower_reply.startswith(("não,", "nao,", "no,"))
+        if is_yes:
+            added_name = pending_add_plusone.pop(phone_number)
+            first_name = added_name.split()[0]
+            add_guest_to_sheet(added_name, added_by=name, with_plus_one=True)
+            return f"✅ Adicionado! *{added_name}* + acompanhante (*Guest ({first_name})*, sem nome ainda) foram incluídos na planilha. Quando souberem o nome do acompanhante, é só me avisar durante o RSVP dele(a)."
+        elif is_no:
+            pending_add_plusone.pop(phone_number)
+            return "Combinado, sem acompanhante! ✅ Já pode confirmar a presença dele(a) quando quiser."
+        else:
+            pending_add_plusone.pop(phone_number, None)
+            # fall through to process this message normally
+
     # --- Reset everything (only useful before invitations go out) ---
     # Note: KNOWN_GUEST_NAMES additions are NOT cleared here — those are
     # deliberate guest-list edits (someone added via "adicionar"), not
     # test conversation noise, so they should survive a reset.
     if any(k in lower_msg for k in RESET_KEYWORDS):
         conversations.clear(); admin_conversations.clear(); rsvp_data.clear()
-        guest_flags.clear(); active_subject.clear(); pending_subject.clear()
+        guest_flags.clear(); active_subject.clear(); active_companion.clear()
+        pending_subject.clear(); pending_group_second.clear(); pending_companion.clear()
+        pending_add_plusone.clear()
         phone_registry.clear(); all_phones.clear(); bridal_party_phones.clear()
         save_state()
         return "🔄 Tudo resetado! Conversas, RSVPs e dados de teste foram apagados. Pronto para recomeçar."
@@ -1089,7 +1310,8 @@ def get_admin_response(phone_number, user_message):
             if existing:
                 return f"'{existing}' já está na lista! Não precisa adicionar de novo. 😊"
             add_guest_to_sheet(candidate, added_by=name)
-            return f"✅ Adicionei *{candidate}* à lista de convidados e na planilha! Já pode confirmar presença dele(a) quando quiser."
+            pending_add_plusone[phone_number] = candidate
+            return f"✅ Adicionei *{candidate}* à lista de convidados e na planilha! Essa pessoa vai levar acompanhante?"
         return "Qual é o nome completo da pessoa que você quer adicionar? 😊"
 
     # --- Check if someone is on the list ---
