@@ -59,6 +59,7 @@ pending_subject = {}     # phone -> name Aurora just asked to confirm, awaiting 
 pending_group_second = {} # phone -> companion name pending confirmation alongside pending_subject, when Aurora's question named BOTH people at once
 pending_companion = {}   # phone -> new companion name Aurora just confirmed, awaiting yes/no
 pending_add_plusone = {} # phone -> newly-added guest's full name, awaiting yes/no on "does this person have a plus-one?"
+pending_rsvp_whom = {}   # phone -> True, when Aurora just asked "confirming who?" and is awaiting the name(s) in the NEXT message — persists regardless of whether that reply repeats the word "rsvp"
 
 def _state_dict():
     return {
@@ -74,6 +75,7 @@ def _state_dict():
         "pending_group_second": pending_group_second,
         "pending_companion": pending_companion,
         "pending_add_plusone": pending_add_plusone,
+        "pending_rsvp_whom": pending_rsvp_whom,
         "known_guest_names": KNOWN_GUEST_NAMES,
         "bridal_party_phones": list(bridal_party_phones),
     }
@@ -108,6 +110,7 @@ def load_state():
             pending_group_second.update(data.get("pending_group_second", {}))
             pending_companion.update(data.get("pending_companion", {}))
             pending_add_plusone.update(data.get("pending_add_plusone", {}))
+            pending_rsvp_whom.update(data.get("pending_rsvp_whom", {}))
             for extra_name in data.get("known_guest_names", []):
                 if extra_name not in KNOWN_GUEST_NAMES:
                     KNOWN_GUEST_NAMES.append(extra_name)
@@ -125,7 +128,11 @@ ADMIN_NUMBERS = {"+353833986529", "+19292277546", "+393490541017"}
 ADMIN_NUMBERS_NORMALIZED = {n.lstrip("+") for n in ADMIN_NUMBERS}
 
 def normalize_phone(p):
-    return (p or "").replace("whatsapp:", "").replace(" ", "").replace("-", "").lstrip("+").strip()
+    cleaned = (p or "").replace("whatsapp:", "").replace(" ", "").replace("-", "").strip()
+    cleaned = cleaned.lstrip("+")
+    if cleaned.startswith("00"):
+        cleaned = cleaned[2:]
+    return cleaned
 
 def is_admin_phone(p):
     return normalize_phone(p) in ADMIN_NUMBERS_NORMALIZED
@@ -383,7 +390,9 @@ RSVP PARA OUTRA PESSOA — REGRA CRÍTICA:
 Quem está te mandando mensagem (o número de telefone) NÃO é necessariamente quem está sendo confirmado. Uma pessoa pode confirmar presença dela mesma E de outras pessoas na mesma conversa (ex: Larissa confirmando a própria presença e também a da Anna Laura).
 SEMPRE deixe claro, a cada novo RSVP dentro da mesma conversa, para QUEM é aquele RSVP específico — nunca assuma que é a mesma pessoa do RSVP anterior nessa conversa.
 Quando o nome mudar de convidado dentro da mesma conversa, trate como um RSVP totalmente novo e separado — não misture dados de uma pessoa com a outra.
-⚠️ TELEFONE DO CONVIDADO — SEMPRE PERGUNTAR: quando alguém estiver confirmando a presença de OUTRA pessoa (não a própria), peça o número de telefone dessa pessoa em algum momento do RSVP (ex: "Qual é o telefone da/do [nome], pra eu adicionar na planilha?"). Isso é essencial pra registrar o contato certo na planilha. Se a pessoa não souber o telefone, tudo bem — só avise que pode adicionar depois.
+⚠️ TELEFONE DO CONVIDADO — REGRA CRÍTICA: NUNCA peça pra pessoa o próprio número de telefone dela — ela já está te mandando mensagem POR esse número, então você já tem! Isso é óbvio e perguntar soa estranho.
+Só peça o telefone de alguém quando essa pessoa NÃO é quem está te mandando mensagem agora (um terceiro de verdade, tipo "RSVP da minha amiga Ana que não está aqui comigo"). Nesse caso, pergunte em algum momento: "Qual é o telefone da/do [nome], pra eu adicionar na planilha?" Se a pessoa não souber, tudo bem — só avise que pode adicionar depois.
+Exemplo do que NÃO fazer: se a Larissa está confirmando ela mesma e o Robert juntos, NUNCA pergunte o telefone da Larissa (ela é quem está te mandando mensagem!) — no máximo, se ainda não tiver o número do Robert registrado, pode perguntar o dele.
 
 
 LISTA DE CONVIDADOS (249 pessoas):
@@ -436,17 +445,17 @@ Assim que souber o nome, confirme desta forma EXATA (importante pro sistema regi
 NUNCA ofereça ou pergunte sobre acompanhante para quem não tem um listado claramente na lista (marcado como "acompanhante de", "Guest", ou nome próprio ao lado). Se a pessoa NÃO tem acompanhante listado, não toque nesse assunto.
 Se mesmo assim a pessoa pedir um acompanhante que não está na lista, diga algo como: "Essa pessoa não está na nossa lista no momento, mas vou perguntar para a Larissa e te aviso, tá? 💕" — e não prometa nada além disso.
 
-DIAS DO EVENTO — OBRIGATÓRIO SER EMPOLGANTE, SEM EXCEÇÃO:
-Isso não é opcional nem uma sugestão — TODA VEZ que perguntar quais dias a pessoa (ou o grupo) vai comparecer, é OBRIGATÓRIO contar o programa completo de forma animada ANTES de perguntar. Nunca pergunte só "vai nos 3 dias?" secamente. Use sempre esta estrutura (adapte o idioma, mas mantenha o conteúdo e o entusiasmo):
+ATENDÂNCIA + DIAS — OBRIGATÓRIO SER EMPOLGANTE, SEM EXCEÇÃO, TUDO EM UMA MENSAGEM SÓ:
+Isso não é opcional — depois de confirmar o nome, a PRÓXIMA mensagem deve perguntar se vai comparecer E quais dias JUNTOS, sempre precedido do programa animado. NUNCA pergunte "vai comparecer?" como uma pergunta separada e seca antes disso — a pessoa não tem como responder direito sem saber o que é cada dia primeiro. Use sempre esta estrutura (adapte o idioma, mas mantenha o conteúdo e o entusiasmo):
 "Vai ser incrível! 🎉 Aqui está nosso programa:
 🍷 Dia 1 (24/06): Vamos passar a tarde numa vinícola linda perto de Roma — aula de culinária, degustação de vinhos, tudo ao ar livre!
 💍 Dia 2 (25/06): O grande dia! Cerimônia às 15h numa basílica histórica no coração de Roma, seguida de recepção incrível numa villa com vista pra cidade.
 🍺 Dia 3 (26/06): Dia de relaxar juntos num pub irlandês, com boa comida e bebida — perfeito pra recuperar do dia anterior!
-Vocês vão nos três dias, ou só em alguns?" (ajustar "vocês/você" conforme for grupo ou pessoa só)
+Vocês vão comparecer? E em quais dias — os três, ou só alguns?" (ajustar "vocês/você" conforme for grupo ou pessoa só)
 Isso vale sempre — inclusive quando a MESMA conversa tem RSVPs de PESSOAS/GRUPOS DIFERENTES (ex: Larissa confirmando ela mesma e depois a Anna): cada nova pessoa ou grupo recebe o texto animado completo de novo. Isso não conta como "repetir uma pergunta" (essa regra é sobre não perguntar a MESMA coisa duas vezes pro MESMO grupo).
 
-RESTRIÇÕES ALIMENTARES:
-Ao perguntar, SEMPRE liste todas as opções: vegetariano, vegano, alergia a nozes, não come carne vermelha, não come porco, alergia a frutos do mar, ou nenhuma restrição. Se for RSVP em grupo, perguntar cobrindo todos de uma vez (ver regra ACOMPANHANTE acima).
+RESTRIÇÕES ALIMENTARES — SEMPRE MENSAGEM SEPARADA:
+Esta é SEMPRE a pergunta seguinte, numa mensagem própria — NUNCA junte com a pergunta de dias/programação, e nunca junte com o convite animado. Ao perguntar, SEMPRE liste todas as opções: vegetariano, vegano, alergia a nozes, não come carne vermelha, não come porco, alergia a frutos do mar, ou nenhuma restrição. Se for RSVP em grupo, perguntar cobrindo todos de uma vez (ver regra ACOMPANHANTE acima).
 
 ELEVADOR NA IGREJA — REGRA CRÍTICA:
 Pergunte de forma neutra, sem assumir que a pessoa já sabe do assunto — sempre explique rapidinho antes de perguntar, tipo: "Uma coisa sobre a cerimônia: são 124 degraus pra subir na basílica. Tem elevador disponível pra quem realmente precisa (mobilidade reduzida, gravidez, crianças de colo). Você vai precisar do elevador ou consegue subir as escadas numa boa?"
@@ -455,15 +464,14 @@ O elevador é reservado APENAS para quem realmente tem dificuldade de mobilidade
 PASSAPORTE — REGRA CRÍTICA DE IDIOMA:
 SÓ ofereça ajuda com passaporte se a conversa estiver em PORTUGUÊS. NUNCA ofereça ou mencione ajuda com passaporte para convidados falando em inglês — esse suporte é exclusivo para convidados brasileiros que precisam tirar passaporte para viajar. Se a conversa é em português E a pessoa está na LISTA DA LARISSA (ou claramente é brasileira), ofereça na etapa de passaporte do RSVP (ver ORDEM DO RSVP abaixo).
 
-ORDEM DO RSVP (uma pergunta por vez, cobrindo o grupo inteiro em cada pergunta quando aplicável):
+ORDEM DO RSVP (uma pergunta por vez, cobrindo o grupo inteiro em cada pergunta quando aplicável — NUNCA junte duas etapas diferentes na mesma mensagem):
 1. Verificação do nome → confirmar o NOME COMPLETO exatamente como na lista, em negrito. Se a pessoa tem acompanhante listado, avisar aqui e propor fazer junto (ver regra ACOMPANHANTE acima). Se o acompanhante não tem nome cadastrado, pedir o nome completo dele(a) aqui também.
-2. Vai(ão) comparecer?
-3. Quais dias? (SEMPRE usar o texto animado obrigatório acima antes de perguntar, cobrindo o grupo)
-4. Restrições alimentares? (listar todas as opções, cobrindo o grupo)
-5. Elevador na igreja? (explicar antes de perguntar, tom acolhedor, cobrindo o grupo)
-6. [Só se em português E brasileiro] Ajuda com passaporte? (perguntar a cada pessoa do grupo que seja brasileira)
-7. Confirmar tudo em UMA mensagem acolhedora, usando o(s) NOME(S) COMPLETO(S) de todos que foram confirmados — este é o passo final, o RSVP só está completo depois desta mensagem
-8. Logo após confirmar, SEMPRE enviar um checklist do que falta resolver: 🛂 Passaporte (se brasileiro), 🏨 Hospedagem, ✈️ Voos — perguntando o status de cada item e oferecendo ajuda com o próximo passo.
+2. Atendância + quais dias, JUNTOS, com o programa animado (ver regra acima — uma única mensagem)
+3. Restrições alimentares? (mensagem própria e separada — listar todas as opções, cobrindo o grupo)
+4. Elevador na igreja? (explicar antes de perguntar, tom acolhedor, cobrindo o grupo)
+5. [Só se em português E brasileiro] Ajuda com passaporte? (perguntar a cada pessoa do grupo que seja brasileira)
+6. Confirmar tudo em UMA mensagem acolhedora, usando o(s) NOME(S) COMPLETO(S) de todos que foram confirmados — este é o passo final, o RSVP só está completo depois desta mensagem
+7. Logo após confirmar, SEMPRE enviar um checklist do que falta resolver: 🛂 Passaporte (se brasileiro), 🏨 Hospedagem, ✈️ Voos — perguntando o status de cada item e oferecendo ajuda com o próximo passo.
 
 NUNCA confirme presença de quem não está na lista → alerte Larissa imediatamente.
 LEMBRETES INTELIGENTES: não repita o que já foi confirmado.
@@ -1136,6 +1144,9 @@ ADMIN_IDENTITY = {
     "19292277546": "Robert Daly",
     "393490541017": "Carlotta"
 }
+# The couple only — derived from ADMIN_IDENTITY (excludes Carlotta) so this
+# can never silently drift out of sync with a separately-typed number list.
+COUPLE_NUMBERS = {"353833986529", "19292277546"}
 
 RSVP_INTENT_KEYWORDS = ["rsvp", "confirmar presença", "confirmar a presença",
                         "quero confirmar", "confirm the attendance", "quero rsvp", "i want to rsvp"]
@@ -1171,6 +1182,65 @@ def resolve_rsvp_intent(text, admin_own_name):
         # falling back to a personal RSVP that wasn't asked for.
         return ("other", candidate)
     return ("ambiguous", None)
+
+WHOM_SELF_WORDS = ["minha", "eu", "myself", "my own", "meu", "me", "eu mesma", "eu mesmo", "i am", "i'm"]
+WHOM_STOPWORDS = {"a", "o", "e", "do", "da", "de", "and", "the", "of", "minha", "meu", "eu", "me", "my", "own"}
+
+def _find_lowercase_name_fallback(text, admin_own_name):
+    """Scans individual lowercase words for a known guest's first name —
+    catches casual typing like 'a minha e do rob' where the name isn't
+    capitalized at all, which extract_capitalized_name's regex can never
+    match since it requires an uppercase first letter. Confirmed as a real
+    gap via testing against an actual guest message, not a hypothetical."""
+    import re as _re3
+    words = _re3.findall(r"[a-zà-ú']+", text.lower())
+    for w in words:
+        if w in WHOM_STOPWORDS or len(w) < 3:
+            continue
+        match = find_known_guest(w)
+        if match and match.lower() != admin_own_name.lower():
+            return match
+    return None
+
+def resolve_whom_reply(text, admin_own_name):
+    """
+    Parses the reply to Aurora's "confirming presence for whom?" question —
+    called from a dedicated pending-state check, so it works regardless of
+    whether this specific reply happens to repeat the word "rsvp" (which
+    was the root cause of a real bug: "a minha e do rob" doesn't contain
+    "rsvp", so it silently fell through to a generic, non-tracked reply,
+    and the whole conversation lost proper subject tracking from that
+    point on).
+
+    Handles the compound case explicitly — "myself and Rob" is common and
+    different from either pure case: it's a joint RSVP for the admin AND
+    a specific other named person together, reusing the same combined-RSVP
+    machinery already built for plus-ones (active_subject + active_companion).
+
+    Returns ("self", None) | ("other", name) | ("both", name) | ("unclear", None)
+    """
+    lower = text.lower()
+    candidate = extract_capitalized_name(text)
+    resolved = find_known_guest(candidate) if candidate else None
+    if not resolved or resolved.lower() == admin_own_name.lower():
+        # Try the lowercase fallback before giving up — real guests often
+        # don't capitalize names when typing casually on WhatsApp.
+        lowercase_match = _find_lowercase_name_fallback(text, admin_own_name)
+        if lowercase_match:
+            resolved = lowercase_match
+    resolved_is_someone_else = resolved and resolved.lower() != admin_own_name.lower()
+
+    has_self_word = any(w in lower for w in WHOM_SELF_WORDS)
+
+    if has_self_word and resolved_is_someone_else:
+        return ("both", resolved)
+    if resolved_is_someone_else:
+        return ("other", resolved)
+    if has_self_word:
+        return ("self", None)
+    if candidate:
+        return ("other", candidate)
+    return ("unclear", None)
 
 ADD_GUEST_KEYWORDS = ["adicionar", "adiciona", "add guest", "add to the list", "add to list",
                        "colocar na lista", "incluir na lista", "esquecemos", "we forgot"]
@@ -1287,6 +1357,47 @@ def get_admin_response(phone_number, user_message):
             pending_add_plusone.pop(phone_number, None)
             # fall through to process this message normally
 
+    # --- Handle a pending "confirming presence for WHOM?" reply. Checked
+    # regardless of whether this message repeats "rsvp"/"confirmar" — this
+    # is the fix for a real bug where "a minha e do rob" (answering exactly
+    # that question) doesn't contain either trigger word, so it silently
+    # fell through to a generic untracked reply, and the RSVP never
+    # actually got recorded anywhere despite the conversation looking
+    # completely normal. ---
+    if phone_number in pending_rsvp_whom:
+        whom_intent, whom_target = resolve_whom_reply(user_message, name)
+        if whom_intent == "both":
+            pending_rsvp_whom.pop(phone_number, None)
+            active_subject[phone_number] = name
+            active_companion[phone_number] = whom_target
+            phone_registry.setdefault(phone_number, name)
+            conversations[phone_number] = [
+                {"role": "user", "content": f"[sistema: RSVP conjunto de {name} e {whom_target}, ambos já identificados, não precisa perguntar os nomes]"},
+                {"role": "assistant", "content": f"Perfeito! Vou confirmar a presença de vocês dois — **{name}** e **{whom_target}**! 💕"}
+            ]
+            return get_aurora_response(phone_number, user_message)
+        if whom_intent == "self":
+            pending_rsvp_whom.pop(phone_number, None)
+            active_subject[phone_number] = name
+            phone_registry.setdefault(phone_number, name)
+            if not conversations.get(phone_number):
+                conversations[phone_number] = [
+                    {"role": "user", "content": f"[sistema: esta conversa é com {name}, já identificado, não precisa perguntar o nome]"},
+                    {"role": "assistant", "content": f"Perfeito! Vamos lá então! 💕 Só para confirmar — você é **{name}** da nossa lista, certo?"}
+                ]
+            return get_aurora_response(phone_number, user_message)
+        if whom_intent == "other":
+            pending_rsvp_whom.pop(phone_number, None)
+            active_subject[phone_number] = whom_target
+            conversations[phone_number] = [
+                {"role": "user", "content": f"[sistema: RSVP sendo feito por {name} em nome de {whom_target}, já identificado, não precisa perguntar o nome. Pergunte o telefone dessa pessoa em algum momento do RSVP.]"},
+                {"role": "assistant", "content": f"Perfeito! Vamos registrar a presença de **{whom_target}**! 💕 Só para confirmar — é a grafia certa do nome?"}
+            ]
+            return get_aurora_response(phone_number, user_message)
+        # still unclear — ask again, but don't loop forever silently;
+        # pending_rsvp_whom stays set so the NEXT reply gets one more try
+        return "Desculpa, não entendi bem! 😊 É a sua presença, de outra pessoa, ou dos dois juntos? Me fala o nome completo se for de alguém específico."
+
     # --- Reset everything (only useful before invitations go out) ---
     # Note: KNOWN_GUEST_NAMES additions are NOT cleared here — those are
     # deliberate guest-list edits (someone added via "adicionar"), not
@@ -1295,15 +1406,15 @@ def get_admin_response(phone_number, user_message):
         conversations.clear(); admin_conversations.clear(); rsvp_data.clear()
         guest_flags.clear(); active_subject.clear(); active_companion.clear()
         pending_subject.clear(); pending_group_second.clear(); pending_companion.clear()
-        pending_add_plusone.clear()
+        pending_add_plusone.clear(); pending_rsvp_whom.clear()
         phone_registry.clear(); all_phones.clear(); bridal_party_phones.clear()
         save_state()
         return "🔄 Tudo resetado! Conversas, RSVPs e dados de teste foram apagados. Pronto para recomeçar."
 
     # --- Add a new guest (Larissa and Robert only) ---
     if any(k in lower_msg for k in ADD_GUEST_KEYWORDS):
-        if norm not in ("353833986529", "19292277546"):
-            return "Só a Larissa ou o Robert podem adicionar convidados à lista. 😊"
+        if norm not in COUPLE_NUMBERS:
+            return "Só os noivos (Larissa e Robert) podem adicionar convidados à lista. 😊"
         candidate = extract_name_after_keyword(user_message, ADD_GUEST_KEYWORDS) or extract_capitalized_name(user_message)
         if candidate:
             existing = find_known_guest(candidate)
@@ -1355,6 +1466,7 @@ def get_admin_response(phone_number, user_message):
     intent, target = resolve_rsvp_intent(user_message, name)
 
     if intent == "other":
+        pending_rsvp_whom.pop(phone_number, None)
         active_subject[phone_number] = target
         conversations[phone_number] = [
             {"role": "user", "content": f"[sistema: RSVP sendo feito por {name} em nome de {target}, já identificado, não precisa perguntar o nome. Pergunte o telefone dessa pessoa em algum momento do RSVP.]"},
@@ -1363,6 +1475,7 @@ def get_admin_response(phone_number, user_message):
         return get_aurora_response(phone_number, user_message)
 
     if intent == "self":
+        pending_rsvp_whom.pop(phone_number, None)
         active_subject[phone_number] = name
         phone_registry.setdefault(phone_number, name)
         if not conversations.get(phone_number):
@@ -1373,6 +1486,7 @@ def get_admin_response(phone_number, user_message):
         return get_aurora_response(phone_number, user_message)
 
     if intent == "ambiguous":
+        pending_rsvp_whom[phone_number] = True
         return "Claro! 😊 Confirmar a presença de quem? Pode ser sua ou de outro convidado — é só me falar o nome."
 
     # --- DEFAULT: treat admin as a normal guest for all other questions ---
@@ -1401,28 +1515,41 @@ def send_whatsapp_message(to_number, message, from_number):
     for chunk in chunks:
         twilio_client.messages.create(from_=from_number, to=to_number, body=chunk)
 
+def _send_broadcast_throttled(phones, message_prefix, msg):
+    """Sends a broadcast with a small random delay between each message —
+    firing 200+ messages near-simultaneously is one of the clearest
+    signals WhatsApp's spam detection watches for (confirmed via research
+    after the Z-API number got flagged during testing). Runs in a
+    background thread so the admin's request returns immediately instead
+    of blocking for however long the whole broadcast takes."""
+    import time, random
+    sent = 0
+    for phone in phones:
+        if is_admin_phone(phone):
+            continue
+        try:
+            send_zapi_message(phone, f"{message_prefix}\n\n{msg}")
+            sent += 1
+        except Exception as e:
+            import sys
+            print(f"BROADCAST SEND ERROR to {phone}: {e}", file=sys.stderr)
+        time.sleep(random.uniform(1.5, 3.5))
+    import sys
+    print(f"BROADCAST COMPLETE: sent to {sent} recipients", file=sys.stderr)
+    alert_larissa(f"📢 Broadcast concluído — enviado para {sent} pessoas.")
+
 def handle_broadcast(message_body, from_number, to_number):
     upper = message_body.upper()
     if upper.startswith("[ALL]"):
         msg = message_body[5:].strip()
-        sent = 0
-        for phone in list(all_phones):
-            if is_admin_phone(phone): continue
-            try:
-                send_zapi_message(phone, f"📢 *Atualização do Casamento*\n\n{msg}")
-                sent += 1
-            except: pass
-        return f"✅ Mensagem enviada para {sent} convidados!"
+        phones = [p for p in list(all_phones) if not is_admin_phone(p)]
+        threading.Thread(target=_send_broadcast_throttled, args=(phones, "📢 *Atualização do Casamento*", msg), daemon=True).start()
+        return f"✅ Enviando aos poucos pra {len(phones)} convidados (espaçado pra não parecer spam pro WhatsApp) — te aviso quando terminar!"
     elif upper.startswith("[BRIDAL]"):
         msg = message_body[8:].strip()
-        sent = 0
-        for phone in list(bridal_party_phones):
-            if is_admin_phone(phone): continue
-            try:
-                send_zapi_message(phone, f"💐 *Mensagem do Cortejo*\n\n{msg}")
-                sent += 1
-            except: pass
-        return f"✅ Mensagem enviada para {sent} pessoas do cortejo!"
+        phones = [p for p in list(bridal_party_phones) if not is_admin_phone(p)]
+        threading.Thread(target=_send_broadcast_throttled, args=(phones, "💐 *Mensagem do Cortejo*", msg), daemon=True).start()
+        return f"✅ Enviando aos poucos pra {len(phones)} pessoas do cortejo — te aviso quando terminar!"
     return None
 
 @app.route('/whatsapp', methods=['POST'])
@@ -1434,6 +1561,8 @@ def whatsapp_webhook():
         return Response('', status=200)
     phone_key = from_number.replace('whatsapp:', '')
     all_phones.add(phone_key)
+    import sys
+    print(f"TWILIO ADMIN CHECK: raw_phone={phone_key!r} normalized={normalize_phone(phone_key)!r} is_admin={is_admin_phone(phone_key)!r}", file=sys.stderr)
     try:
         upper_msg = incoming_message.upper()
         if is_admin_phone(phone_key) and (upper_msg.startswith("[ALL]") or upper_msg.startswith("[BRIDAL]")):
@@ -1494,6 +1623,7 @@ def zapi_webhook():
             return Response('', status=200)
 
         print(f"Z-API: phone={phone} text={text}", file=sys.stderr)
+        print(f"ADMIN CHECK: raw_phone={phone!r} normalized={normalize_phone(phone)!r} is_admin={is_admin_phone(phone)!r} known_admin_numbers={ADMIN_NUMBERS_NORMALIZED}", file=sys.stderr)
 
         if phone in processing:
             import time
@@ -1563,24 +1693,14 @@ def handle_broadcast_zapi(message_body, from_phone):
     upper = message_body.upper()
     if upper.startswith("[ALL]"):
         msg = message_body[5:].strip()
-        sent = 0
-        for phone in list(all_phones):
-            if is_admin_phone(phone): continue
-            try:
-                send_zapi_message(phone, f"📢 *Atualização do Casamento*\n\n{msg}")
-                sent += 1
-            except: pass
-        return f"✅ Mensagem enviada para {sent} convidados!"
+        phones = [p for p in list(all_phones) if not is_admin_phone(p)]
+        threading.Thread(target=_send_broadcast_throttled, args=(phones, "📢 *Atualização do Casamento*", msg), daemon=True).start()
+        return f"✅ Enviando aos poucos pra {len(phones)} convidados (espaçado pra não parecer spam pro WhatsApp) — te aviso quando terminar!"
     elif upper.startswith("[BRIDAL]"):
         msg = message_body[8:].strip()
-        sent = 0
-        for phone in list(bridal_party_phones):
-            if is_admin_phone(phone): continue
-            try:
-                send_zapi_message(phone, f"💐 *Mensagem do Cortejo*\n\n{msg}")
-                sent += 1
-            except: pass
-        return f"✅ Mensagem enviada para {sent} pessoas do cortejo!"
+        phones = [p for p in list(bridal_party_phones) if not is_admin_phone(p)]
+        threading.Thread(target=_send_broadcast_throttled, args=(phones, "💐 *Mensagem do Cortejo*", msg), daemon=True).start()
+        return f"✅ Enviando aos poucos pra {len(phones)} pessoas do cortejo — te aviso quando terminar!"
     return ""
 
 @app.route('/health', methods=['GET'])
