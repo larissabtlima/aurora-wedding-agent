@@ -1703,6 +1703,42 @@ def handle_broadcast_zapi(message_body, from_phone):
         return f"✅ Enviando aos poucos pra {len(phones)} pessoas do cortejo — te aviso quando terminar!"
     return ""
 
+@app.route('/test-chat', methods=['POST'])
+def test_chat():
+    """
+    Lets you chat with the REAL Aurora — same logic, same conversation
+    memory, same RSVP tracking, same spreadsheet writes — entirely outside
+    WhatsApp. Built specifically so testing never risks a Z-API/WhatsApp
+    ban: this endpoint never touches Z-API or Twilio at all, it's a
+    completely separate door into the same brain.
+
+    Protected by a shared secret (TEST_CHAT_SECRET env var) so random
+    internet traffic can't rack up Anthropic API costs or spam the sheet.
+    """
+    secret = os.environ.get("TEST_CHAT_SECRET", "")
+    provided = request.headers.get("X-Test-Secret", "")
+    if not secret or provided != secret:
+        return {"error": "unauthorized"}, 401
+
+    data = request.get_json(force=True) or {}
+    phone = str(data.get("phone", "")).strip()
+    message = str(data.get("message", "")).strip()
+    if not phone or not message:
+        return {"error": "phone and message are required"}, 400
+
+    all_phones.add(phone)
+    try:
+        if is_admin_phone(phone):
+            reply = get_admin_response(phone, message)
+        else:
+            reply = get_aurora_response(phone, message)
+    except Exception as e:
+        import sys, traceback
+        print(f"TEST-CHAT ERROR: {e}\n{traceback.format_exc()}", file=sys.stderr)
+        return {"error": str(e)}, 500
+
+    return {"reply": reply}, 200
+
 @app.route('/health', methods=['GET'])
 def health():
     return {'status': 'Aurora is live 💍', 'conversations': len(all_phones), 'rsvps': len(rsvp_data)}, 200
