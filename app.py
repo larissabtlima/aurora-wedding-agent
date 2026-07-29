@@ -22,7 +22,7 @@ def search_web_flights(query):
         import sys
         print(f"FLIGHT SEARCH ERROR: {str(e)}", file=sys.stderr)
         return False
-from flask import Flask, request, Response
+from flask import Flask, request, Response, jsonify
 from twilio.rest import Client
 import anthropic
 
@@ -1703,7 +1703,7 @@ def handle_broadcast_zapi(message_body, from_phone):
         return f"✅ Enviando aos poucos pra {len(phones)} pessoas do cortejo — te aviso quando terminar!"
     return ""
 
-@app.route('/test-chat', methods=['POST'])
+@app.route('/test-chat', methods=['POST', 'OPTIONS'])
 def test_chat():
     """
     Lets you chat with the REAL Aurora — same logic, same conversation
@@ -1714,17 +1714,36 @@ def test_chat():
 
     Protected by a shared secret (TEST_CHAT_SECRET env var) so random
     internet traffic can't rack up Anthropic API costs or spam the sheet.
+
+    CORS headers are added explicitly because the test-chat HTML file is
+    opened directly in the browser (not served from a website), which
+    browsers treat as cross-origin — without these headers the browser
+    blocks the request before it ever reaches this route at all, which is
+    exactly what "Failed to fetch" means.
     """
+    if request.method == 'OPTIONS':
+        # Preflight request — browsers send this automatically before the
+        # real POST whenever custom headers (like X-Test-Secret) are used.
+        resp = Response('', status=204)
+        resp.headers['Access-Control-Allow-Origin'] = '*'
+        resp.headers['Access-Control-Allow-Headers'] = 'Content-Type, X-Test-Secret'
+        resp.headers['Access-Control-Allow-Methods'] = 'POST, OPTIONS'
+        return resp
+
     secret = os.environ.get("TEST_CHAT_SECRET", "")
     provided = request.headers.get("X-Test-Secret", "")
     if not secret or provided != secret:
-        return {"error": "unauthorized"}, 401
+        resp = jsonify({"error": "unauthorized"})
+        resp.headers['Access-Control-Allow-Origin'] = '*'
+        return resp, 401
 
     data = request.get_json(force=True) or {}
     phone = str(data.get("phone", "")).strip()
     message = str(data.get("message", "")).strip()
     if not phone or not message:
-        return {"error": "phone and message are required"}, 400
+        resp = jsonify({"error": "phone and message are required"})
+        resp.headers['Access-Control-Allow-Origin'] = '*'
+        return resp, 400
 
     all_phones.add(phone)
     try:
@@ -1735,9 +1754,13 @@ def test_chat():
     except Exception as e:
         import sys, traceback
         print(f"TEST-CHAT ERROR: {e}\n{traceback.format_exc()}", file=sys.stderr)
-        return {"error": str(e)}, 500
+        resp = jsonify({"error": str(e)})
+        resp.headers['Access-Control-Allow-Origin'] = '*'
+        return resp, 500
 
-    return {"reply": reply}, 200
+    resp = jsonify({"reply": reply})
+    resp.headers['Access-Control-Allow-Origin'] = '*'
+    return resp, 200
 
 @app.route('/health', methods=['GET'])
 def health():
