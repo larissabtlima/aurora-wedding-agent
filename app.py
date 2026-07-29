@@ -50,6 +50,39 @@ phone_registry = {}      # phone -> name of the PHONE OWNER (not necessarily who
 rsvp_data = {}           # guest_name (lowercase) -> rsvp details
 all_phones = set()
 processing = set()
+
+def with_phone_lock(phone, fn, *args, **kwargs):
+    """
+    Ensures only ONE request for a given phone number is ever being
+    processed at a time, regardless of which route it came in through.
+
+    This was previously only implemented inline inside the Z-API route —
+    meaning the new /test-chat endpoint (and, on reflection, the Twilio
+    route) had NO protection against two overlapping requests for the same
+    phone. Confirmed as a real bug via live testing: sending two messages
+    in quick succession produced a response that server-side logs showed
+    was processed correctly, but the WRONG reply text came back — classic
+    symptom of two requests interleaving on the same conversation history.
+    Waits briefly for an in-flight request to finish rather than dropping
+    the new one outright (dropping was tried before and caused its own
+    complaints about messages seeming "unread").
+    """
+    import time
+    if phone in processing:
+        for _ in range(20):  # wait up to ~10s for the in-flight message to finish
+            time.sleep(0.5)
+            if phone not in processing:
+                break
+        else:
+            import sys
+            print(f"PHONE LOCK: {phone} still busy after waiting — proceeding anyway to avoid silently dropping a message", file=sys.stderr)
+
+    processing.add(phone)
+    try:
+        return fn(*args, **kwargs)
+    finally:
+        processing.discard(phone)
+
 processed_message_ids = set()
 last_processed_time = {}
 guest_flags = {}         # guest_name (lowercase) -> flags (rsvp_done, passport_done, etc)
@@ -1570,10 +1603,14 @@ def whatsapp_webhook():
             if reply:
                 send_whatsapp_message(from_number, reply, to_number)
                 return Response('', status=200)
-        if is_admin_phone(phone_key):
-            reply = get_admin_response(phone_key, incoming_message)
-        else:
-            reply = get_aurora_response(phone_key, incoming_message)
+
+        def _process():
+            if is_admin_phone(phone_key):
+                return get_admin_response(phone_key, incoming_message)
+            else:
+                return get_aurora_response(phone_key, incoming_message)
+
+        reply = with_phone_lock(phone_key, _process)
         send_whatsapp_message(from_number, reply, to_number)
     except Exception as e:
         import sys
@@ -1625,36 +1662,23 @@ def zapi_webhook():
         print(f"Z-API: phone={phone} text={text}", file=sys.stderr)
         print(f"ADMIN CHECK: raw_phone={phone!r} normalized={normalize_phone(phone)!r} is_admin={is_admin_phone(phone)!r} known_admin_numbers={ADMIN_NUMBERS_NORMALIZED}", file=sys.stderr)
 
-        if phone in processing:
-            import time
-            print(f"Z-API: phone {phone} busy — waiting briefly instead of dropping", file=sys.stderr)
-            for _ in range(20):  # wait up to ~10s for the in-flight message to finish
-                time.sleep(0.5)
-                if phone not in processing:
-                    break
-            else:
-                print(f"Z-API: phone {phone} still busy after wait — skipping to avoid overlap", file=sys.stderr)
-                return Response('', status=200)
-
-        processing.add(phone)
         all_phones.add(phone)
 
-        upper_msg = text.upper()
-        if is_admin_phone(phone) and (upper_msg.startswith('[ALL]') or upper_msg.startswith('[BRIDAL]')):
-            reply = handle_broadcast_zapi(text, phone)
-        elif is_admin_phone(phone):
-            reply = get_admin_response(phone, text)
-        else:
-            reply = get_aurora_response(phone, text)
+        def _process():
+            upper_msg = text.upper()
+            if is_admin_phone(phone) and (upper_msg.startswith('[ALL]') or upper_msg.startswith('[BRIDAL]')):
+                return handle_broadcast_zapi(text, phone)
+            elif is_admin_phone(phone):
+                return get_admin_response(phone, text)
+            else:
+                return get_aurora_response(phone, text)
 
+        reply = with_phone_lock(phone, _process)
         send_zapi_message(phone, reply)
 
     except Exception as e:
         import sys
         print(f"Z-API ERROR: {str(e)}", file=sys.stderr)
-    finally:
-        if phone:
-            processing.discard(phone)
     return Response('', status=200)
 
 def send_zapi_message(phone, message):
@@ -1746,11 +1770,15 @@ def test_chat():
         return resp, 400
 
     all_phones.add(phone)
-    try:
+
+    def _process():
         if is_admin_phone(phone):
-            reply = get_admin_response(phone, message)
+            return get_admin_response(phone, message)
         else:
-            reply = get_aurora_response(phone, message)
+            return get_aurora_response(phone, message)
+
+    try:
+        reply = with_phone_lock(phone, _process)
     except Exception as e:
         import sys, traceback
         print(f"TEST-CHAT ERROR: {e}\n{traceback.format_exc()}", file=sys.stderr)
