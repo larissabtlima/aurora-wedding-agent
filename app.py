@@ -87,9 +87,9 @@ processed_message_ids = set()
 last_processed_time = {}
 guest_flags = {}         # guest_name (lowercase) -> flags (rsvp_done, passport_done, etc)
 active_subject = {}      # phone -> name currently being RSVP'd on this phone
-active_companion = {}    # phone -> companion's name, when doing a COMBINED group RSVP (their answers get mirrored from the primary's, since combined questions can't be reliably split per-person from free text)
+active_companion = {}    # phone -> LIST of companion names, when doing a COMBINED group RSVP (their answers get mirrored from the primary's, since combined questions can't be reliably split per-person from free text). A list, not a single name, because some guests have more than one linked person (e.g. Fabiano has both a plus-one AND a family member listed).
 pending_subject = {}     # phone -> name Aurora just asked to confirm, awaiting yes/no
-pending_group_second = {} # phone -> companion name pending confirmation alongside pending_subject, when Aurora's question named BOTH people at once
+pending_group_second = {} # phone -> LIST of companion names pending confirmation alongside pending_subject, when Aurora's question named the primary plus one or more others at once
 pending_companion = {}   # phone -> new companion name Aurora just confirmed, awaiting yes/no
 pending_add_plusone = {} # phone -> newly-added guest's full name, awaiting yes/no on "does this person have a plus-one?"
 pending_rsvp_whom = {}   # phone -> True, when Aurora just asked "confirming who?" and is awaiting the name(s) in the NEXT message — persists regardless of whether that reply repeats the word "rsvp"
@@ -458,24 +458,26 @@ CONFIRMAÇÃO DE NOME — REGRA CRÍTICA:
 Ao confirmar quem é o convidado, SEMPRE use o NOME COMPLETO exatamente como está na lista de convidados, em **negrito** (ex: "**Larissa Daly**", nunca só "Larissa"). O nome completo é usado para organizar os lugares na recepção — é essencial. NUNCA confirme ou registre apenas o primeiro nome.
 
 ACOMPANHANTE (+1) — RSVP EM GRUPO, REGRA CRÍTICA:
-Assim que identificar quem é o convidado (logo no início do RSVP), verifique se essa pessoa tem um acompanhante listado.
+Assim que identificar quem é o convidado (logo no início do RSVP), verifique se essa pessoa tem QUALQUER PESSOA LIGADA a ela na lista — isso inclui tanto "acompanhante de X" quanto "família de X". ⚠️ IMPORTANTE: algumas pessoas têm MAIS DE UMA pessoa ligada a elas ao mesmo tempo (por exemplo, Fabiano Lima tem DUAS: Jhenifer Bering, que é acompanhante dele, E Alexia Lima, que é família dele) — sempre confira e mencione TODAS as pessoas ligadas, nunca só a primeira que encontrar.
 
-CASO A — o acompanhante JÁ TEM nome próprio na lista (ex: "Jhenifer Bering"): avise assim, colocando as DUAS pessoas em negrito na MESMA mensagem — isso é essencial pro sistema registrar o RSVP em dupla corretamente: "Vi aqui que **[Nome Completo do convidado principal]** tem um acompanhante — **[Nome Completo do acompanhante]**! Vou fazer o RSVP dos dois juntos, tá bom? Assim é bem mais rápido." (as DUAS pessoas SEMPRE em negrito juntas nessa mensagem específica de confirmação)
+CASO A — todas as pessoas ligadas JÁ TÊM nome próprio na lista: avise assim, colocando TODOS os nomes em negrito na MESMA mensagem — isso é essencial pro sistema registrar o RSVP em grupo corretamente:
+Se for só 1 pessoa ligada: "Vi aqui que **[Nome Completo do convidado principal]** tem um acompanhante — **[Nome Completo do acompanhante]**! Vou fazer o RSVP dos dois juntos, tá bom? Assim é bem mais rápido."
+Se forem 2+ pessoas ligadas: "Vi aqui que **[Nome Completo do convidado principal]** está junto com **[Nome 2]** e **[Nome 3]**! Vou fazer o RSVP dos três (ou mais) juntos, tá bom? Assim é bem mais rápido." (TODOS os nomes SEMPRE em negrito juntos nessa mensagem específica de confirmação — o sistema só reconhece o grupo corretamente se todos os nomes estiverem em negrito na mesma mensagem)
 
-CASO B — o acompanhante ainda é só "Guest" (sem nome próprio cadastrado): avise assim, com só o nome do convidado principal em negrito: "Vi aqui que você tem um acompanhante, mas ainda não temos o nome dele(a) cadastrado! Qual é o nome completo?" (ver regra NOME DO ACOMPANHANTE abaixo pra continuar esse fluxo)
+CASO B — alguma pessoa ligada ainda é só "Guest" (sem nome próprio cadastrado): avise assim, com o(s) nome(s) já conhecido(s) em negrito: "Vi aqui que você tem um acompanhante, mas ainda não temos o nome dele(a) cadastrado! Qual é o nome completo?" (ver regra NOME DO ACOMPANHANTE abaixo pra continuar esse fluxo — e se houver OUTRAS pessoas já nomeadas além dessa sem nome, mencione essas também no Caso A ao mesmo tempo)
 
 Se a pessoa preferir fazer separado ou "depois", tudo bem — respeite, e faça o RSVP normal só da pessoa principal.
-⚠️ SE O RSVP FOR EM DUPLA/GRUPO (Caso A confirmado, ou Caso B depois que o nome for capturado): a partir daqui, TODAS as perguntas seguintes (dias, dieta, elevador) devem ser feitas UMA VEZ SÓ, cobrindo as DUAS (ou mais) pessoas ao mesmo tempo — nunca repita a pergunta pessoa por pessoa. Exemplos de como perguntar:
-"Vocês dois vão nos três dias, ou só em alguns?"
-"Algum de vocês tem restrição alimentar? (vegetariano, vegano, alergia a nozes, não come carne vermelha, não come porco, alergia a frutos do mar, ou nenhuma)"
-"Algum dos dois vai precisar do elevador na cerimônia?"
-Se as respostas forem diferentes entre as duas pessoas (ex: um vai só 2 dias, o outro os 3), pergunte especificamente pra esclarecer e registre CADA resposta separadamente para a pessoa certa — só a PERGUNTA é feita junta, os DADOS continuam sendo de cada um individualmente.
-Isso vale pra grupos maiores também (3, 4+ pessoas) — sempre uma pergunta cobrindo todo o grupo de uma vez, nunca repetindo pessoa por pessoa. Isso evita que alguém com vários acompanhantes tenha que responder a mesma pergunta várias vezes.
+⚠️ SE O RSVP FOR EM GRUPO (Caso A confirmado, ou Caso B depois que o nome for capturado): a partir daqui, TODAS as perguntas seguintes (dias, dieta, elevador) devem ser feitas UMA VEZ SÓ, cobrindo TODAS as pessoas do grupo ao mesmo tempo — nunca repita a pergunta pessoa por pessoa. Exemplos de como perguntar:
+"Vocês vão nos três dias, ou só em alguns?"
+"Alguém do grupo tem restrição alimentar? (vegetariano, vegano, alergia a nozes, não come carne vermelha, não come porco, alergia a frutos do mar, ou nenhuma)"
+"Alguém do grupo vai precisar do elevador na cerimônia?"
+Se as respostas forem diferentes entre as pessoas (ex: um vai só 2 dias, os outros os 3), pergunte especificamente pra esclarecer e registre CADA resposta separadamente para a pessoa certa — só a PERGUNTA é feita junta, os DADOS continuam sendo de cada um individualmente.
+Isso vale pra grupos de qualquer tamanho (2, 3, 4+ pessoas) — sempre uma pergunta cobrindo todo o grupo de uma vez, nunca repetindo pessoa por pessoa. Isso evita que alguém com vários acompanhantes/família tenha que responder a mesma pergunta várias vezes.
 
 NOME DO ACOMPANHANTE SEM NOME CADASTRADO — REGRA CRÍTICA:
 Se o acompanhante aparece na lista só como "Guest" (sem nome próprio, ex: "Guest (Corey)"), pergunte o nome completo dele(a) durante o RSVP: "Qual é o nome completo do seu acompanhante, pra eu atualizar na nossa lista?"
 Assim que souber o nome, confirme desta forma EXATA (importante pro sistema registrar certo): "Perfeito! O nome do seu acompanhante é **[Nome Completo]**, correto?"
-NUNCA ofereça ou pergunte sobre acompanhante para quem não tem um listado claramente na lista (marcado como "acompanhante de", "Guest", ou nome próprio ao lado). Se a pessoa NÃO tem acompanhante listado, não toque nesse assunto.
+NUNCA ofereça ou pergunte sobre acompanhante para quem não tem ninguém listado claramente na lista (marcado como "acompanhante de", "família de", "Guest", ou nome próprio ao lado). Se a pessoa NÃO tem ninguém ligado listado, não toque nesse assunto.
 Se mesmo assim a pessoa pedir um acompanhante que não está na lista, diga algo como: "Essa pessoa não está na nossa lista no momento, mas vou perguntar para a Larissa e te aviso, tá? 💕" — e não prometa nada além disso.
 
 ATENDÂNCIA + DIAS — OBRIGATÓRIO SER EMPOLGANTE, SEM EXCEÇÃO, TUDO EM UMA MENSAGEM SÓ:
@@ -845,15 +847,16 @@ def detect_subject_change(phone, assistant_text, user_message):
             pending_subject[phone] = resolved_names[0]
             pending_group_second.pop(phone, None)
             return
-        if len(resolved_names) == 2:
+        if len(resolved_names) >= 2:
             # Aurora is confirming a COMBINED group RSVP (e.g. "vou fazer o
-            # RSVP de **Fabiano Lima** e **Jhenifer Bering** juntos, tá?").
-            # Track both — see extract_rsvp_from_response, which mirrors
-            # shared-question answers (days/dietary/elevator) onto BOTH
-            # people once this is confirmed, so the companion actually
-            # gets data instead of being silently dropped.
+            # RSVP de **Fabiano Lima**, **Jhenifer Bering** e **Alexia
+            # Lima** juntos, tá?"). Some guests have MORE than one linked
+            # person (a plus-one AND a family member, for example) — this
+            # handles any group size, not just pairs, which was a real gap
+            # found via testing: Fabiano has two people linked to him, but
+            # the old code only ever tracked one.
             pending_subject[phone] = resolved_names[0]
-            pending_group_second[phone] = resolved_names[1]
+            pending_group_second[phone] = resolved_names[1:]
             return
 
     lower_user = user_message.lower().strip()
@@ -930,7 +933,9 @@ def detect_companion_name(phone, assistant_text, user_message):
         primary_name = active_subject.get(phone)
         if primary_name:
             rename_placeholder_guest(primary_name, companion_name)
-            active_companion[phone] = companion_name
+            existing = active_companion.get(phone, [])
+            if companion_name not in existing:
+                active_companion[phone] = existing + [companion_name]
 
 def extract_rsvp_from_response(phone, response_text, user_message):
     detect_subject_change(phone, response_text, user_message)
@@ -1090,29 +1095,48 @@ def extract_rsvp_from_response(phone, response_text, user_message):
     # via testing that keyword extraction can't reliably split this, so
     # it's safer to leave the companion's entry untouched and let Larissa
     # know a manual check is needed than to record a plausibly-wrong value.
+    # GROUP RSVP MIRRORING: if this RSVP is being done as a combined group
+    # (active_companion set — a LIST, since some guests have more than one
+    # linked person, e.g. a plus-one AND a family member), mirror the
+    # SHARED-QUESTION flags (attending, days, dietary, elevator) onto EVERY
+    # companion's own entry too. This is necessarily an approximation — a
+    # single combined answer can't be reliably split per-person from free
+    # text — so it assumes everyone gave the same answer, which covers the
+    # common case. If their answers actually differed, Aurora's system
+    # prompt instructs her to call that out explicitly rather than let this
+    # silent copy be the only record.
+    #
+    # SAFETY NET: if the message itself signals a SPLIT answer (e.g. "eu
+    # vou os 3 dias mas ela só vai no dia 2"), skip the auto-mirror rather
+    # than silently copying a wrong answer onto the companions — confirmed
+    # via testing that keyword extraction can't reliably split this, so
+    # it's safer to leave their entries untouched and let Larissa know a
+    # manual check is needed than to record a plausibly-wrong value.
     split_answer_signals = ["mas ela", "mas ele", "mas eu", "só ela", "só ele", "ela só",
                             "ele só", "different", "diferente", "but she", "but he"]
     looks_split = any(s in lower for s in split_answer_signals)
 
-    companion_name = active_companion.get(phone)
-    if companion_name and companion_name.lower().strip() != key:
+    companion_names = active_companion.get(phone, [])
+    for companion_name in companion_names:
+        if not companion_name or companion_name.lower().strip() == key:
+            continue
         comp_key = companion_name.lower().strip()
         if looks_split:
             print(f"GROUP MIRROR SKIPPED (split-answer signal detected): '{companion_name}' NOT auto-updated from '{subject_name}' — message: {user_message!r}", file=sys.stderr)
-            alert_larissa(f"⚠️ *{subject_name}* e *{companion_name}* parecem ter dado respostas diferentes no RSVP em dupla — confira manualmente na planilha, não atualizei automaticamente pra não errar.")
-        else:
-            if comp_key not in rsvp_data:
-                rsvp_data[comp_key] = {}
-            if comp_key not in guest_flags:
-                guest_flags[comp_key] = {}
-            for flag in ["attending", "days", "dietary", "dietary_vegetarian", "dietary_vegan",
-                         "dietary_nut_allergy", "dietary_no_beef", "dietary_no_pork", "dietary_shellfish"]:
-                if flag in rsvp_data[key]:
-                    rsvp_data[comp_key][flag] = rsvp_data[key][flag]
-            rsvp_data[comp_key]["name"] = companion_name
-            print(f"GROUP MIRROR: '{companion_name}' <- mirrored from '{subject_name}'", file=sys.stderr)
-            if rsvp_data[comp_key].get("attending") and rsvp_data[comp_key].get("name"):
-                log_to_sheets("rsvp", rsvp_data[comp_key])
+            alert_larissa(f"⚠️ *{subject_name}* e *{companion_name}* parecem ter dado respostas diferentes no RSVP em grupo — confira manualmente na planilha, não atualizei automaticamente pra não errar.")
+            continue
+        if comp_key not in rsvp_data:
+            rsvp_data[comp_key] = {}
+        if comp_key not in guest_flags:
+            guest_flags[comp_key] = {}
+        for flag in ["attending", "days", "dietary", "dietary_vegetarian", "dietary_vegan",
+                     "dietary_nut_allergy", "dietary_no_beef", "dietary_no_pork", "dietary_shellfish"]:
+            if flag in rsvp_data[key]:
+                rsvp_data[comp_key][flag] = rsvp_data[key][flag]
+        rsvp_data[comp_key]["name"] = companion_name
+        print(f"GROUP MIRROR: '{companion_name}' <- mirrored from '{subject_name}'", file=sys.stderr)
+        if rsvp_data[comp_key].get("attending") and rsvp_data[comp_key].get("name"):
+            log_to_sheets("rsvp", rsvp_data[comp_key])
 
     save_state()
 
@@ -1411,7 +1435,7 @@ def get_admin_response(phone_number, user_message):
         if whom_intent == "both":
             pending_rsvp_whom.pop(phone_number, None)
             active_subject[phone_number] = name
-            active_companion[phone_number] = whom_target
+            active_companion[phone_number] = [whom_target]
             phone_registry.setdefault(phone_number, name)
             conversations[phone_number] = [
                 {"role": "user", "content": f"[sistema: RSVP conjunto de {name} e {whom_target}, ambos já identificados, não precisa perguntar os nomes]"},
