@@ -68,6 +68,7 @@ def with_phone_lock(phone, fn, *args, **kwargs):
 
 processed_message_ids = set()
 guest_flags = {}         # guest_name (lowercase) -> flags (rsvp_done, passport_done, etc)
+passport_requests = {}   # guest_name (lowercase) -> full collected passport data dict — previously this data was only ever mentioned conversationally and never actually saved anywhere, a real gap found via live testing
 active_subject = {}      # phone -> name currently being RSVP'd on this phone
 active_companion = {}    # phone -> LIST of companion names, when doing a COMBINED group RSVP (their answers get mirrored from the primary's, since combined questions can't be reliably split per-person from free text). A list, not a single name, because some guests have more than one linked person (e.g. Fabiano has both a plus-one AND a family member listed).
 pending_subject = {}     # phone -> name Aurora just asked to confirm, awaiting yes/no
@@ -84,6 +85,7 @@ def _state_dict():
         "rsvp_data": rsvp_data,
         "all_phones": list(all_phones),
         "guest_flags": guest_flags,
+        "passport_requests": passport_requests,
         "active_subject": active_subject,
         "active_companion": active_companion,
         "pending_subject": pending_subject,
@@ -108,7 +110,7 @@ def save_state():
             print(f"SAVE STATE ERROR: {str(e)}", file=sys.stderr)
 
 def load_state():
-    global conversations, admin_conversations, phone_registry, rsvp_data, all_phones, guest_flags, active_subject, pending_subject
+    global conversations, admin_conversations, phone_registry, rsvp_data, all_phones, guest_flags, passport_requests, active_subject, pending_subject
     try:
         if os.path.exists(DATA_FILE):
             with open(DATA_FILE, "r", encoding="utf-8") as f:
@@ -119,6 +121,7 @@ def load_state():
             rsvp_data = data.get("rsvp_data", {})
             all_phones = set(data.get("all_phones", []))
             guest_flags = data.get("guest_flags", {})
+            passport_requests = data.get("passport_requests", {})
             active_subject = data.get("active_subject", {})
             active_companion.update(data.get("active_companion", {}))
             pending_subject = data.get("pending_subject", {})
@@ -358,6 +361,11 @@ def schedule_weekly_report():
 schedule_weekly_report()
 
 SYSTEM_PROMPT = """Você é Aurora, a assistente virtual oficial do casamento de Larissa e Robert em Roma, junho de 2027. Quando fala em inglês, responde em inglês. Quando fala em português, responde em português brasileiro — sempre natural, correto e fluente, como uma brasileira falaria. Nunca use português europeu ou traduções literais estranhas.
+
+NOSSA HISTÓRIA (compartilhe quando alguém perguntar como Larissa e Robert se conheceram — de forma calorosa e resumida, não precisa copiar tudo palavra por palavra):
+Tudo começou em Dublin, em 2019, com um match em um aplicativo de namoro. No primeiro encontro, foram ao cinema ver "Cemitério Maldito" — filme que Larissa até hoje jura ser um dos piores já feitos! Antes de se conhecerem, os amigos brasileiros do Robert já tinham avisado ele: "se você sair com uma brasileira, o beijo no primeiro encontro é obrigatório!" Ele ficou um pouco nervoso na hora, então foi a Larissa quem deu o primeiro passo. Desde aquele encontro, os dois cresceram juntos, misturando culturas e construindo uma vida a dois — de Dublin até Nova York, onde moram hoje. Agora estão super animados pra celebrar esse "para sempre" com todas as pessoas favoritas deles, em Roma!
+
+HONESTIDADE — REGRA CRÍTICA: se você não tiver certeza de algo (o que já foi confirmado antes, um dado específico, se uma tarefa já foi realmente concluída), NUNCA finja saber ou invente uma resposta. Diga claramente que não tem certeza e, se for o caso, peça pra pessoa confirmar de novo — é sempre melhor admitir isso do que dar uma informação errada com confiança.
 
 PRIMEIRA MENSAGEM — OBRIGATÓRIO:
 Quando alguém mandar mensagem pela primeira vez, SEMPRE comece assim:
@@ -685,18 +693,51 @@ ORDEM CORRETA (nunca pule direto pra coleta de dados):
 "Vou te explicar como funciona! 🛂 A Larissa está ajudando os convidados brasileiros a tirar o passaporte. O processo é: você me manda seus dados (documentos, cidade, etc.), eu repasso pra Larissa, ela agenda tudo na Polícia Federal mais perto de você, e você só precisa enviar o valor da taxa via PIX. Ela cuida do agendamento pra você não ter que se preocupar com isso!
 Taxa: R$257,25 (comum) ou R$334,42 (urgência) → PIX 13005770613
 Quer que eu comece a coletar suas informações?"
-2. SÓ depois que a pessoa confirmar que quer prosseguir, aí sim colete os dados: nome, CPF, data nasc., status do passaporte atual, cidade, disponibilidade.
-3. Confirme que vai repassar tudo pra Larissa.
+
+2. SÓ depois que a pessoa confirmar, colete os dados EM GRUPOS de 2-3 perguntas por mensagem (não uma por vez — a lista é longa, isso é uma EXCEÇÃO deliberada à regra de "uma pergunta por vez", pra não demorar uma eternidade). Use exatamente esta sequência de grupos:
+Grupo 1: "Nome completo, data de nascimento e naturalidade (cidade/estado onde nasceu)?"
+Grupo 2: "Nome completo da mãe e do pai (filiação)? E qual seu estado civil?"
+Grupo 3: "Número do RG, órgão emissor e UF, e a data de expedição dele?"
+Grupo 4: "Seu CPF, e seu endereço completo (rua, número, bairro, cidade)?"
+Grupo 5: "Telefone, email e profissão?"
+Grupo 6: "Você já teve passaporte antes? Se sim, qual o número e ano de emissão. Se já mudou de nome (casamento, divórcio), me avisa também."
+Grupo 7: "Por fim: qual cidade você quer fazer o agendamento na Polícia Federal, e qual sua disponibilidade (manhã, tarde, fim de semana)?"
+Se a pessoa não souber alguma informação (ex: órgão emissor do RG), tudo bem, pode pular e seguir — não precisa travar nisso.
+
+3. Ao FINAL, depois de coletar tudo, envie uma mensagem de confirmação para a pessoa E, na mesma resposta, inclua um resumo em formato estruturado EXATO abaixo (isso é usado pelo sistema pra registrar tudo automaticamente — sempre inclua mesmo que alguns campos estejam em branco):
+
+PASSAPORTE_COLETADO:
+Nome: [valor]
+DataNascimento: [valor]
+Naturalidade: [valor]
+Mae: [valor]
+Pai: [valor]
+EstadoCivil: [valor]
+RG: [valor]
+OrgaoEmissor: [valor]
+CPF: [valor]
+Endereco: [valor]
+Telefone: [valor]
+Email: [valor]
+Profissao: [valor]
+PassaporteAnterior: [valor ou "primeiro passaporte"]
+NomeAnterior: [valor ou "não mudou"]
+CidadeAgendamento: [valor]
+Disponibilidade: [valor]
+
+Depois desse bloco estruturado, continue a conversa normalmente, tipo: "Perfeito! Já registrei tudo e vou passar pra Larissa. Assim que ela agendar na Polícia Federal, ela te avisa os detalhes! 💕"
 
 ETIAS: a União Europeia confirmou (fevereiro 2026) que o lançamento foi adiado para "pelo menos 2027", com um período de transição mesmo depois do lançamento. Ou seja, é bem provável que NÃO seja obrigatório ainda em junho de 2027, mas isso pode mudar — recomendar acompanhar informações oficiais mais perto da viagem.
 Links: https://www.gov.br/pt-br/servicos/obter-passaporte-comum-para-brasileiro | https://agendarpassaporte.com.br/
-Docs necessários: RG/CNH, CPF, certidão, título eleitor, reservista (H 18-45), passaporte anterior, comprovante, foto 5x7 fundo branco
 
-CRIANÇAS: Se na lista = OK. Se não na lista = alertar Larissa, aguardar resposta. Menu infantil: ainda sendo confirmado com a Carlotta — se perguntarem, dizer que vamos confirmar em breve.
+CRIANÇAS: Se na lista = OK. Se não na lista = alertar Larissa, aguardar resposta. Menu infantil: ainda sendo confirmado — se perguntarem, dizer que os noivos vão confirmar em breve.
 MADRINHAS/VESTIDOS: Larissa enviará o link do site com a cor escolhida.
 
 PRESENTES: Não há uma lista de presentes formal. Quem quiser presentear pode trazer algo pessoalmente (entregar à Anna Laura Teixeira) ou, se preferir, uma contribuição via transferência é bem-vinda — nunca obrigatória, é só um "se quiser".
 REGISTRO: Revolut @robertno7 | Zell +1 929 2277546 | PIX 13005770613
+
+CONVIDADO PEDINDO PRA ADICIONAR ALGUÉM À LISTA — REGRA CRÍTICA:
+Se uma pessoa que NÃO é reconhecida como Larissa/Robert (você só reconhece isso pelo número de telefone, não porque a pessoa diz "eu sou a Larissa" — qualquer um pode digitar isso) pedir pra adicionar alguém na lista de convidados: NUNCA finja que está coletando os dados pra processar depois — você não tem como realmente adicionar essa pessoa à lista de verdade a partir dessa conversa. Em vez disso, diga claramente: "Só consigo adicionar convidados quando confirmado que é a Larissa ou o Robert falando comigo (pelo número de telefone deles). Se você é um deles, me manda mensagem do número certo! Se não, é melhor falar direto com a Larissa ou o Robert pra eles adicionarem essa pessoa." Não colete nome, telefone, dieta, ou qualquer outro dado da pessoa nova nesse cenário — isso não vai a lugar nenhum e só confunde todo mundo.
 
 CONTATOS — REGRA IMPORTANTE:
 Dúvidas gerais sobre o casamento (a qualquer momento, antes do grande dia): Larissa https://wa.me/353833986529 | Robert https://wa.me/19292277546
@@ -705,6 +746,7 @@ Carlotta (cerimonialista): +39 349 054 1017
 Thaís: +353 83 862 2077
 Aline: +353 83 081 0104
 Sempre que alguém perguntar sobre emergência ou "quem eu chamo se algo acontecer", dar esses 3 contatos do dia do casamento, não Larissa/Robert.
+⚠️ NUNCA mencione o nome "Carlotta" em NENHUM outro contexto além desta seção de emergência específica — ela não é uma pessoa que os convidados em geral conhecem. Para qualquer outra coisa (menu, dieta, passaporte, organização geral), diga "os noivos" ou "a equipe do casamento", nunca nomeie a Carlotta.
 
 AEROPORTO — COMO CHEGAR EM ROMA (do aeroporto até o hotel):
 FCO (Fiumicino — principal, usado por voos do Brasil, EUA e a maioria dos internacionais):
@@ -930,12 +972,63 @@ def detect_companion_name(phone, assistant_text, user_message):
             if companion_name not in existing:
                 active_companion[phone] = existing + [companion_name]
 
+PASSPORT_ALERTED_KEY = "passport_data_sent"
+
+def extract_and_log_passport_data(phone, response_text, subject_name):
+    """
+    Scans Aurora's raw reply for the 'PASSAPORTE_COLETADO:' structured
+    marker block the system prompt instructs her to output once she's
+    finished collecting a guest's passport information — and actually
+    does something with it, which nothing did before. Confirmed as a real
+    gap: the prompt promised this data would be "used by the system to
+    register everything automatically," but there was no code anywhere
+    that ever read this marker — collected passport data simply had
+    nowhere to go. Sends an immediate WhatsApp alert AND logs a persistent
+    row to a dedicated spreadsheet tab, so it's not just a message that
+    can get lost among everything else.
+    """
+    if "PASSAPORTE_COLETADO:" not in response_text:
+        return
+    import re
+    block = response_text.split("PASSAPORTE_COLETADO:", 1)[1]
+    fields = {}
+    for line in block.splitlines():
+        line = line.strip()
+        if not line or ":" not in line:
+            continue
+        key, _, value = line.partition(":")
+        key = key.strip()
+        value = value.strip().strip("[]")
+        if key and value and key.isalpha():
+            fields[key] = value
+        elif not key.isalpha():
+            break  # stop once we hit non-field text (end of the block)
+    if not fields:
+        return
+
+    guest_key = subject_name.lower().strip()
+    if guest_flags.get(guest_key, {}).get(PASSPORT_ALERTED_KEY):
+        return  # already sent once for this person — don't spam on every later message
+    guest_flags.setdefault(guest_key, {})[PASSPORT_ALERTED_KEY] = True
+
+    summary_lines = "\n".join(f"• {k}: {v}" for k, v in fields.items())
+    alert_larissa(f"🛂 *Dados de passaporte coletados — {subject_name}*\n\n{summary_lines}\n\nPronto pra agendar na Polícia Federal!")
+    log_to_sheets("action_needed", {
+        "type": "Passaporte",
+        "name": subject_name,
+        "details": summary_lines,
+        "timestamp": str(datetime.datetime.utcnow())
+    })
+    import sys
+    print(f"PASSPORT DATA LOGGED: {subject_name} — {len(fields)} fields", file=sys.stderr)
+
 def extract_rsvp_from_response(phone, response_text, user_message):
     detect_subject_change(phone, response_text, user_message)
     detect_companion_name(phone, response_text, user_message)
 
     subject_name = active_subject.get(phone) or phone_registry.get(phone) or "unknown"
     key = subject_name.lower().strip()
+    extract_and_log_passport_data(phone, response_text, subject_name)
 
     # Migrate any stale "unknown" entry for this phone onto the real name
     if key != "unknown" and phone in [rsvp_data.get("unknown", {}).get("phone")]:
@@ -1005,11 +1098,19 @@ def extract_rsvp_from_response(phone, response_text, user_message):
         guest_flags[key]["accommodation_booked"] = True
 
     # Elevator need — Larissa has no other way to find out about this, so
-    # alert her directly the moment it's mentioned (once per guest).
+    # alert her directly the moment it's mentioned (once per guest), AND
+    # log it to a persistent sheet tab — a WhatsApp ping alone can get
+    # lost among many messages; a checklist she can come back to doesn't.
     if any(w in lower for w in ["preciso do elevador", "vou precisar do elevador", "elevador sim", "sim, elevador", "preciso de elevador", "need the elevator", "i'll need the elevator"]):
         if not guest_flags[key].get("elevator_alerted"):
             guest_flags[key]["elevator_alerted"] = True
             alert_larissa(f"🛗 *{subject_name}* vai precisar do elevador na igreja no dia do casamento (25/06). Já pode providenciar!")
+            log_to_sheets("action_needed", {
+                "type": "Elevador",
+                "name": subject_name,
+                "details": "Precisa do elevador na cerimônia (25/06)",
+                "timestamp": str(datetime.datetime.utcnow())
+            })
 
     # STICKY flags: only set to True when mentioned. Never reset to False on a
     # later turn just because that turn's message doesn't repeat the word —
@@ -1228,36 +1329,6 @@ RSVP_INTENT_KEYWORDS = ["rsvp", "confirmar presença", "confirmar a presença",
 SELF_REFERENCE_WORDS = ["minha presença", "minha presenca", "myself", "eu mesma", "eu mesmo",
                         "my own", "meu rsvp", "sou convidad", "i'm also a guest", "im also a guest"]
 
-def resolve_rsvp_intent(text, admin_own_name):
-    """Figures out, unambiguously, whether an RSVP-intent message is about
-    the admin themselves or about someone else — and if someone else, who.
-    Replaces the old approach of two separate keyword lists that could
-    collide on overlapping phrases like "quero confirmar" (which matched
-    both 'personal RSVP' and 'RSVP for someone else', causing whichever
-    check ran first to silently swallow the other's intent).
-    Returns ("self", None) | ("other", resolved_name) | ("ambiguous", None) | (None, None) if no RSVP intent at all.
-    """
-    lower = text.lower()
-    matched_keyword = next((k for k in RSVP_INTENT_KEYWORDS if k in lower), None)
-    if not matched_keyword:
-        return (None, None)
-
-    candidate = extract_capitalized_name(text, after_keyword=matched_keyword)
-    resolved = find_known_guest(candidate) if candidate else None
-
-    if resolved and resolved.lower() != admin_own_name.lower():
-        return ("other", resolved)
-    if resolved and resolved.lower() == admin_own_name.lower():
-        return ("self", None)
-    if any(w in lower for w in SELF_REFERENCE_WORDS):
-        return ("self", None)
-    if candidate:
-        # Got a name-like word but it didn't resolve to any known guest —
-        # still treat as "other" using the raw text, rather than silently
-        # falling back to a personal RSVP that wasn't asked for.
-        return ("other", candidate)
-    return ("ambiguous", None)
-
 WHOM_SELF_WORDS = ["minha", "eu", "myself", "my own", "meu", "me", "eu mesma", "eu mesmo", "i am", "i'm"]
 WHOM_STOPWORDS = {"a", "o", "e", "do", "da", "de", "and", "the", "of", "minha", "meu", "eu", "me", "my", "own"}
 
@@ -1277,20 +1348,20 @@ def _find_lowercase_name_fallback(text, admin_own_name):
             return match
     return None
 
-def resolve_whom_reply(text, admin_own_name):
+def _resolve_person_reference(text, admin_own_name):
     """
-    Parses the reply to Aurora's "confirming presence for whom?" question —
-    called from a dedicated pending-state check, so it works regardless of
-    whether this specific reply happens to repeat the word "rsvp" (which
-    was the root cause of a real bug: "a minha e do rob" doesn't contain
-    "rsvp", so it silently fell through to a generic, non-tracked reply,
-    and the whole conversation lost proper subject tracking from that
-    point on).
+    Shared core logic for figuring out who a message is about — used by
+    BOTH resolve_rsvp_intent (the very first message) and resolve_whom_reply
+    (a follow-up after Aurora asks "for whom?"). Handles casual lowercase
+    typing ("rob" not "Rob") and the compound case ("rob e eu" = both the
+    admin AND a specific other person together).
 
-    Handles the compound case explicitly — "myself and Rob" is common and
-    different from either pure case: it's a joint RSVP for the admin AND
-    a specific other named person together, reusing the same combined-RSVP
-    machinery already built for plus-ones (active_subject + active_companion).
+    This used to only exist inside resolve_whom_reply, which meant the
+    FIRST message in a conversation ("quero rsvp rob e eu") never got this
+    treatment — only a follow-up message would. Confirmed as a real bug via
+    live testing: that exact phrase, sent as the opening message, returned
+    "ambiguous" and asked "for whom?" again, even though the answer was
+    already right there.
 
     Returns ("self", None) | ("other", name) | ("both", name) | ("unclear", None)
     """
@@ -1298,8 +1369,6 @@ def resolve_whom_reply(text, admin_own_name):
     candidate = extract_capitalized_name(text)
     resolved = find_known_guest(candidate) if candidate else None
     if not resolved or resolved.lower() == admin_own_name.lower():
-        # Try the lowercase fallback before giving up — real guests often
-        # don't capitalize names when typing casually on WhatsApp.
         lowercase_match = _find_lowercase_name_fallback(text, admin_own_name)
         if lowercase_match:
             resolved = lowercase_match
@@ -1317,8 +1386,54 @@ def resolve_whom_reply(text, admin_own_name):
         return ("other", candidate)
     return ("unclear", None)
 
-ADD_GUEST_KEYWORDS = ["adicionar", "adiciona", "add guest", "add to the list", "add to list",
-                       "colocar na lista", "incluir na lista", "esquecemos", "we forgot"]
+def resolve_rsvp_intent(text, admin_own_name):
+    """Figures out, unambiguously, whether an RSVP-intent message is about
+    the admin themselves, someone else, or both together — using the same
+    shared resolver as resolve_whom_reply (see _resolve_person_reference),
+    so a compound opening message like "quero rsvp rob e eu" is handled
+    correctly on the FIRST try, not just on a follow-up.
+    Returns ("self", None) | ("other", name) | ("both", name) | ("ambiguous", None) | (None, None) if no RSVP intent at all.
+    """
+    lower = text.lower()
+    matched_keyword = next((k for k in RSVP_INTENT_KEYWORDS if k in lower), None)
+    if not matched_keyword:
+        return (None, None)
+
+    intent, target = _resolve_person_reference(text, admin_own_name)
+    if intent == "unclear":
+        return ("ambiguous", None)
+    return (intent, target)
+
+def resolve_whom_reply(text, admin_own_name):
+    """
+    Parses the reply to Aurora's "confirming presence for whom?" question —
+    called from a dedicated pending-state check, so it works regardless of
+    whether this specific reply happens to repeat the word "rsvp".
+    Returns ("self", None) | ("other", name) | ("both", name) | ("unclear", None)
+    """
+    return _resolve_person_reference(text, admin_own_name)
+
+ADD_GUEST_KEYWORDS_PT = ["adicionar", "adiciona", "colocar na lista", "incluir na lista", "esquecemos"]
+ADD_GUEST_WORD_PAIRS = [("add", "list"), ("forgot", "list"), ("add", "guest")]
+
+def matches_add_guest_intent(text):
+    """Detects 'add someone to the guest list' regardless of natural word
+    order. The old approach used fixed phrases like 'add to the list' —
+    which completely fails for the most natural real phrasing, 'add [NAME]
+    to the wedding list', since the name sits between 'add' and 'list' and
+    breaks the exact-phrase match. Confirmed as a real, serious bug via
+    live testing: an admin's add-guest request was silently never
+    recognized at all, so it fell through to a slow, purely conversational
+    reply that never actually saved anything anywhere."""
+    lower = text.lower()
+    if any(k in lower for k in ADD_GUEST_KEYWORDS_PT):
+        return True
+    words = set(_re.findall(r"[a-zà-ú]+", lower))
+    for w1, w2 in ADD_GUEST_WORD_PAIRS:
+        if w1 in words and w2 in words:
+            return True
+    return False
+
 CHECK_GUEST_KEYWORDS = ["está na lista", "esta na lista", "tá na lista", "ta na lista",
                          "is on the list", "is she on", "is he on", "procurar convidado"]
 RESET_KEYWORDS = ["[reset]", "resetar tudo", "reset everything", "apagar tudo teste"]
@@ -1470,10 +1585,10 @@ def get_admin_response(phone_number, user_message):
         return "🔄 Tudo resetado! Conversas, RSVPs e dados de teste foram apagados. Pronto para recomeçar."
 
     # --- Add a new guest (Larissa and Robert only) ---
-    if any(k in lower_msg for k in ADD_GUEST_KEYWORDS):
+    if matches_add_guest_intent(user_message):
         if norm not in COUPLE_NUMBERS:
             return "Só os noivos (Larissa e Robert) podem adicionar convidados à lista. 😊"
-        candidate = extract_name_after_keyword(user_message, ADD_GUEST_KEYWORDS) or extract_capitalized_name(user_message)
+        candidate = extract_capitalized_name(user_message) or extract_name_after_keyword(user_message, ADD_GUEST_KEYWORDS_PT)
         if candidate:
             existing = find_known_guest(candidate)
             if existing:
@@ -1523,6 +1638,17 @@ def get_admin_response(phone_number, user_message):
     # themselves, for someone else (and who), or too ambiguous to guess ---
     intent, target = resolve_rsvp_intent(user_message, name)
 
+    if intent == "both":
+        pending_rsvp_whom.pop(phone_number, None)
+        active_subject[phone_number] = name
+        active_companion[phone_number] = [target]
+        phone_registry.setdefault(phone_number, name)
+        conversations[phone_number] = [
+            {"role": "user", "content": f"[sistema: RSVP conjunto de {name} e {target}, ambos já identificados, não precisa perguntar os nomes]"},
+            {"role": "assistant", "content": f"Perfeito! Vou confirmar a presença de vocês dois — **{name}** e **{target}**! 💕"}
+        ]
+        return get_aurora_response(phone_number, user_message)
+
     if intent == "other":
         pending_rsvp_whom.pop(phone_number, None)
         active_subject[phone_number] = target
@@ -1545,7 +1671,8 @@ def get_admin_response(phone_number, user_message):
 
     if intent == "ambiguous":
         pending_rsvp_whom[phone_number] = True
-        return "Claro! 😊 Confirmar a presença de quem? Pode ser sua ou de outro convidado — é só me falar o nome."
+        first_name = name.split()[0]
+        return f"Claro! 😊 É a sua presença ({first_name}), de outra pessoa, ou dos dois juntos? É só me falar o nome se for de alguém específico."
 
     # --- DEFAULT: treat admin as a normal guest for all other questions ---
     # (flights, money, Rome tips, dress code, hotels, etc.)
