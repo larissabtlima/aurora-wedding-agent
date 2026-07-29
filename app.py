@@ -976,8 +976,17 @@ def extract_rsvp_from_response(phone, response_text, user_message):
         "comparecer", "vai vir", "vão comparecer", "will you attend",
         "will you be attending", "you both attending", "attending the wedding"
     ])
-    bare_sim = lower.strip() in ("sim", "sim.", "yes", "yes.")
-    bare_nao = lower.strip() in ("não", "nao", "não.", "nao.", "no", "no.")
+    # Recognize "sim"/"não" as a WHOLE WORD at the very start of the reply
+    # — not requiring an exact-match-only message. This matters because the
+    # attendance question is now combined with the days question in one
+    # message (per an earlier request), so the natural reply became "sim,
+    # os três dias" rather than a bare "sim" alone. An exact-match check
+    # silently failed to recognize that as a yes at all — confirmed as a
+    # real bug via live testing: a guest who fully confirmed attendance
+    # ended up with attending never set at all in the spreadsheet.
+    stripped = lower.strip()
+    bare_sim = bool(_re.match(r'^(sim|yes)\b', stripped))
+    bare_nao = bool(_re.match(r'^(não|nao|no)\b', stripped))
 
     unambiguous_yes = any(w in lower for w in ["vou comparecer", "vou sim", "com certeza que vou", "presença confirmada", "confirmo minha presença", "confirmo a presença"])
     unambiguous_no = any(w in lower for w in ["not attending", "can't make", "unable", "não vou", "não poderei", "não consigo", "infelizmente não"])
