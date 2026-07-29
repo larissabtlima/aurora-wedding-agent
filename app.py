@@ -226,6 +226,15 @@ KNOWN_GUEST_NAMES = [
     "Tay Vieira", "Rafeela", "Leo", "Stephanie Marques", "Ingrid Mariano", "Sean O Sullivan",
     "Diego Alcantara", "Alexia Gouveia"
 ]
+# Snapshot of how many guests were in the ORIGINAL static list at startup —
+# anything appended after this point (via the "adicionar" admin flow) is a
+# guest the LLM itself has never seen in its own instructions, since its
+# knowledge of the guest list comes from the static text below, not from
+# this Python list. Used to inject a note about newly-added guests into
+# the system prompt at request time — otherwise a guest added minutes ago
+# greeting Aurora directly gets told they're not on the list at all, which
+# is exactly what happened in testing.
+ORIGINAL_GUEST_COUNT = len(KNOWN_GUEST_NAMES)
 
 def find_known_guest(name_query):
     """Returns the matching guest name from the known list, or None.
@@ -1140,13 +1149,29 @@ def extract_rsvp_from_response(phone, response_text, user_message):
 
     save_state()
 
+def get_effective_system_prompt():
+    """
+    SYSTEM_PROMPT plus a note about any guest added since startup via the
+    "adicionar" admin flow. Without this, Aurora's own conversational
+    knowledge of who's on the guest list comes ONLY from the static text
+    below — a guest added five minutes ago would greet Aurora, give their
+    own name, and be told they're not on the list at all, even though the
+    Python-side matching (used for admin RSVP-on-behalf) already knows
+    about them. Confirmed as a real bug via live testing.
+    """
+    newly_added = KNOWN_GUEST_NAMES[ORIGINAL_GUEST_COUNT:]
+    if not newly_added:
+        return SYSTEM_PROMPT
+    note = "\n\nCONVIDADOS ADICIONADOS DEPOIS DA LISTA ACIMA (também são convidados legítimos, mesmo não aparecendo na lista principal): " + ", ".join(newly_added)
+    return SYSTEM_PROMPT + note
+
 def get_aurora_response(phone_number, user_message):
     add_to_conversation(phone_number, "user", user_message)
     messages = get_conversation(phone_number)
     response = anthropic_client.messages.create(
         model="claude-haiku-4-5-20251001",
         max_tokens=1024,
-        system=SYSTEM_PROMPT,
+        system=get_effective_system_prompt(),
         messages=messages
     )
     raw_text = response.content[0].text
