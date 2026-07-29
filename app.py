@@ -5,23 +5,6 @@ import datetime
 import urllib.request
 import urllib.parse
 
-def search_web_flights(query):
-    """Search Google for flight options and return a summary."""
-    try:
-        encoded = urllib.parse.quote(query)
-        search_url = f"https://www.google.com/search?q={encoded}"
-        req = urllib.request.Request(
-            search_url,
-            headers={"User-Agent": "Mozilla/5.0 (compatible; AuroraBot/1.0)"}
-        )
-        result = urllib.request.urlopen(req, timeout=8)
-        import sys
-        print(f"FLIGHT SEARCH: {query} → status {result.status}", file=sys.stderr)
-        return True
-    except Exception as e:
-        import sys
-        print(f"FLIGHT SEARCH ERROR: {str(e)}", file=sys.stderr)
-        return False
 from flask import Flask, request, Response, jsonify
 from twilio.rest import Client
 import anthropic
@@ -84,7 +67,6 @@ def with_phone_lock(phone, fn, *args, **kwargs):
         processing.discard(phone)
 
 processed_message_ids = set()
-last_processed_time = {}
 guest_flags = {}         # guest_name (lowercase) -> flags (rsvp_done, passport_done, etc)
 active_subject = {}      # phone -> name currently being RSVP'd on this phone
 active_companion = {}    # phone -> LIST of companion names, when doing a COMBINED group RSVP (their answers get mirrored from the primary's, since combined questions can't be reliably split per-person from free text). A list, not a single name, because some guests have more than one linked person (e.g. Fabiano has both a plus-one AND a family member listed).
@@ -172,8 +154,6 @@ def is_admin_phone(p):
 
 LARISSA_NUMBER = "+353833986529"
 ROB_NUMBER = "+19292277546"
-CARLOTTA_NUMBER = "+393490541017"
-SPREADSHEET_ID = "1__SAxw3AMWy8Rb3LlRNzfw1MMIJ__4jc7PYpJ5RVDwk"
 
 bridal_party_phones = set()
 BRIDAL_PARTY_NAMES = {
@@ -294,7 +274,6 @@ def find_known_guest(name_query):
             best = known
     return best if best_score > 0 else None
 
-BRAZIL_NAME_MARKERS = None  # placeholder, Brazilian guest list is matched via the guest list itself
 
 # Must be called here, AFTER KNOWN_GUEST_NAMES and bridal_party_phones are
 # defined above — load_state() populates both from disk, so calling it any
@@ -347,15 +326,16 @@ def alert_larissa(message):
         print(f"ALERT ERROR: {str(e)}", file=sys.stderr)
 
 def send_weekly_report():
+    total_guests = len(KNOWN_GUEST_NAMES)
     attending = sum(1 for r in rsvp_data.values() if r.get("attending") == "yes")
     not_attending = sum(1 for r in rsvp_data.values() if r.get("attending") == "no")
-    pending = 249 - len(rsvp_data)
+    pending = total_guests - len(rsvp_data)
     report = (
         f"📊 *Aurora Weekly Wedding Report*\n"
         f"_Friday update — Larissa & Robert Wedding_\n\n"
         f"✅ Confirmed attending: *{attending}*\n"
         f"❌ Not attending: *{not_attending}*\n"
-        f"⏳ Awaiting RSVP: *{pending}* of 249\n\n"
+        f"⏳ Awaiting RSVP: *{pending}* of {total_guests}\n\n"
         f"💬 Total conversations: {len(all_phones)}\n\n"
         f"_Message Aurora to ask for names, who hasn't RSVPed, or any details!_"
     )
@@ -493,7 +473,7 @@ Se mesmo assim a pessoa pedir um acompanhante que não está na lista, diga algo
 ATENDÂNCIA + DIAS — OBRIGATÓRIO SER EMPOLGANTE, SEM EXCEÇÃO, TUDO EM UMA MENSAGEM SÓ:
 Isso não é opcional — depois de confirmar o nome, a PRÓXIMA mensagem deve perguntar se vai comparecer E quais dias JUNTOS, sempre precedido do programa animado. NUNCA pergunte "vai comparecer?" como uma pergunta separada e seca antes disso — a pessoa não tem como responder direito sem saber o que é cada dia primeiro. Use sempre esta estrutura (adapte o idioma, mas mantenha o conteúdo e o entusiasmo):
 "Vai ser incrível! 🎉 Aqui está nosso programa:
-🍷 Dia 1 (24/06): Vamos passar a tarde numa vinícola linda perto de Roma — aula de como fazer macarrão do zero, degustação de vinhos, tudo ao ar livre!
+🍷 Dia 1 (24/06): Vamos passar a tarde numa vinícola linda perto de Roma — aula de massas, degustação de vinhos, tudo ao ar livre!
 💍 Dia 2 (25/06): O grande dia! Cerimônia às 15h numa basílica histórica no coração de Roma, seguida de recepção incrível numa villa com vista pra cidade.
 🍺 Dia 3 (26/06): Dia de relaxar juntos num pub irlandês, com boa comida e bebida — perfeito pra recuperar do dia anterior!
 Vocês vão comparecer? E em quais dias — os três, ou só alguns?" (ajustar "vocês/você" conforme for grupo ou pessoa só)
@@ -539,7 +519,7 @@ DETALHES DO CASAMENTO:
 DIA 1 — 24 JUNHO: VINÍCOLA 🍷
 Cantina Santa Benedetta | Via Frascati Colonna 35, Monte Porzio Catone
 https://maps.google.com/?q=Cantina+Santa+Benedetta+Monte+Porzio+Catone
-Vinícola familiar 300+ anos, Castelli Romani. Aula de culinária (massa!) e degustação de vinhos. Parte ao ar livre. Traje smart casual, sapatos confortáveis. ~40 min de Roma. Transporte fornecido, ponto a informar.
+Vinícola familiar 300+ anos, Castelli Romani. Aula de massas e degustação de vinhos. Parte ao ar livre. Traje smart casual, sapatos confortáveis. ~40 min de Roma. Transporte fornecido, ponto a informar.
 NÃO invente detalhes extras — mais informações serão enviadas mais perto da data.
 
 DIA 2 — 25 JUNHO: CASAMENTO 💍
@@ -806,7 +786,7 @@ def get_admin_stats():
         "total_rsvps": len(rsvp_data),
         "attending": attending,
         "not_attending": not_attending,
-        "awaiting_rsvp": 249 - len(rsvp_data),
+        "awaiting_rsvp": len(KNOWN_GUEST_NAMES) - len(rsvp_data),
         "identified_guests": len(phone_registry),
         "rsvp_names": [r.get("name", "Unknown") for r in rsvp_data.values()],
         "identified_list": list(phone_registry.values()),
@@ -905,6 +885,9 @@ def rename_placeholder_guest(primary_full_name, real_companion_name):
         "primary_first_name": primary_first_name,
         "new_name": real_companion_name
     })
+    placeholder_name = f"Guest ({primary_first_name})"
+    if placeholder_name in KNOWN_GUEST_NAMES:
+        KNOWN_GUEST_NAMES.remove(placeholder_name)
     if real_companion_name not in KNOWN_GUEST_NAMES:
         KNOWN_GUEST_NAMES.append(real_companion_name)
     import sys
@@ -1405,23 +1388,6 @@ def is_admin_stats_query(text):
     has_topic = any(w in lower for w in ADMIN_QUERY_TOPIC_WORDS)
     return has_subject and has_topic
 
-def is_admin_query(text):
-    """Returns True only if the message is clearly an admin/management query,
-    not a general wedding info question that Aurora can answer normally."""
-    lower = text.lower()
-    # Explicit admin keywords
-    if is_admin_stats_query(text):
-        return True
-    if any(k in lower for k in ADD_GUEST_KEYWORDS):
-        return True
-    if any(k in lower for k in CHECK_GUEST_KEYWORDS):
-        return True
-    # RSVP on behalf of someone else (not personal)
-    intent, _ = resolve_rsvp_intent(text, "")
-    if intent in ("other", "ambiguous"):
-        return True
-    return False
-
 def get_admin_response(phone_number, user_message):
     norm = normalize_phone(phone_number)
     name = ADMIN_IDENTITY.get(norm, "Carlotta (wedding planner)")
@@ -1758,7 +1724,10 @@ def send_zapi_message(phone, message):
         message = message[split_at:].strip()
     chunks.append(message)
     url = f"https://api.z-api.io/instances/{instance_id}/token/{token}/send-text"
-    for chunk in chunks:
+    for i, chunk in enumerate(chunks):
+        if i > 0:
+            import time
+            time.sleep(1.2)  # small gap between chunks of the SAME message — same burst pattern that contributed to the original WhatsApp flag, just at a much smaller scale
         try:
             payload = json.dumps({"phone": phone, "message": chunk}).encode()
             headers = {"Content-Type": "application/json"}
