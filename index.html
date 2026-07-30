@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Larissa & Robert — Rome 2027 RSVP</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Montserrat:wght@300;400;500;600&display=swap" rel="stylesheet">
+  
+  <style>
+    :root {
+      --bg-color: #FAF8F5;
+      --card-bg: #FFFFFF;
+      --primary: #2C3E35; /* Deep Roman Cypress Green */
+      --accent: #C5A059;  /* Warm Vintage Gold */
+      --text: #333333;
+      --text-muted: #666666;
+      --border: #E8E2D9;
+      --error: #A94442;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Montserrat', sans-serif;
+      background-color: var(--bg-color);
+      color: var(--text);
+      line-height: 1.6;
+      padding: 40px 20px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 650px;
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 40px 30px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.04);
+      position: relative;
+    }
+
+    .lang-toggle {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      display: flex;
+      gap: 8px;
+    }
+
+    .lang-btn {
+      background: transparent;
+      border: 1px solid var(--border);
+      padding: 5px 12px;
+      font-size: 0.75rem;
+      letter-spacing: 1px;
+      cursor: pointer;
+      border-radius: 20px;
+      transition: all 0.2s ease;
+    }
+
+    .lang-btn.active {
+      background: var(--primary);
+      color: #FFF;
+      border-color: var(--primary);
+    }
+
+    .header {
+      text-align: center;
+      margin-bottom: 35px;
+    }
+
+    .header h1 {
+      font-family: 'Cinzel', serif;
+      font-size: 2rem;
+      letter-spacing: 3px;
+      color: var(--primary);
+      text-transform: uppercase;
+      margin-bottom: 8px;
+    }
+
+    .header p {
+      font-size: 0.85rem;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: var(--accent);
+      font-weight: 600;
+    }
+
+    .form-group {
+      margin-bottom: 25px;
+    }
+
+    label {
+      display: block;
+      font-size: 0.85rem;
+      font-weight: 600;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      margin-bottom: 8px;
+      color: var(--primary);
+    }
+
+    input[type="text"], input[type="tel"], select {
+      width: 100%;
+      padding: 14px 16px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-family: 'Montserrat', sans-serif;
+      font-size: 0.95rem;
+      background: #FAF9F7;
+      color: var(--text);
+      transition: border-color 0.2s;
+    }
+
+    input:focus, select:focus {
+      outline: none;
+      border-color: var(--accent);
+      background: #FFF;
+    }
+
+    .radio-group, .checkbox-group {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-top: 8px;
+    }
+
+    .radio-card, .checkbox-card {
+      border: 1px solid var(--border);
+      padding: 14px;
+      border-radius: 6px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 0.9rem;
+      background: #FAF9F7;
+      transition: all 0.2s;
+    }
+
+    .radio-card:hover, .checkbox-card:hover {
+      border-color: var(--accent);
+    }
+
+    .radio-card input, .checkbox-card input {
+      accent-color: var(--primary);
+      width: 18px;
+      height: 18px;
+    }
+
+    .family-box {
+      background: #F4F0EA;
+      padding: 20px;
+      border-radius: 8px;
+      border-left: 4px solid var(--accent);
+      margin-bottom: 25px;
+    }
+
+    .family-box h3 {
+      font-family: 'Cinzel', serif;
+      font-size: 1rem;
+      color: var(--primary);
+      margin-bottom: 10px;
+    }
+
+    .btn-submit {
+      width: 100%;
+      background: var(--primary);
+      color: #FFF;
+      border: none;
+      padding: 16px;
+      font-family: 'Cinzel', serif;
+      font-size: 1rem;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: background 0.2s;
+      margin-top: 10px;
+    }
+
+    .btn-submit:hover {
+      background: #1D2A24;
+    }
+
+    .success-card {
+      text-align: center;
+      display: none;
+      padding: 20px 0;
+    }
+
+    .success-card h2 {
+      font-family: 'Cinzel', serif;
+      color: var(--primary);
+      margin-bottom: 12px;
+    }
+
+    .wa-btn {
+      display: inline-block;
+      margin-top: 20px;
+      background: #25D366;
+      color: white;
+      text-decoration: none;
+      padding: 14px 24px;
+      border-radius: 30px;
+      font-weight: 600;
+      font-size: 0.9rem;
+      letter-spacing: 0.5px;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    <div class="lang-toggle">
+      <button class="lang-btn active" onclick="setLanguage('en')">EN</button>
+      <button class="lang-btn" onclick="setLanguage('pt')">PT</button>
+    </div>
+
+    <div id="rsvpFormContainer">
+      <div class="header">
+        <h1>Larissa & Robert</h1>
+        <p id="subHeader">Rome • June 24–26, 2027</p>
+      </div>
+
+      <form id="rsvpForm" onsubmit="handleFormSubmit(event)">
+        <div class="form-group">
+          <label id="lblFullTitle">Your Full Name</label>
+          <input type="text" id="guestName" placeholder="e.g. Linda Cahill" required oninput="checkFamilyGroup(this.value)">
+        </div>
+
+        <div class="form-group">
+          <label id="lblAttending">Will you attend?</label>
+          <div class="radio-group">
+            <label class="radio-card">
+              <input type="radio" name="attending" value="yes" required checked>
+              <span id="txtYes">Joyfully Accept</span>
+            </label>
+            <label class="radio-card">
+              <input type="radio" name="attending" value="no">
+              <span id="txtNo">Regretfully Decline</span>
+            </label>
+          </div>
+        </div>
+
+        <div class="family-box" id="familySection" style="display: none;">
+          <h3 id="lblFamilyTitle">Family & Companions</h3>
+          <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 12px;" id="lblFamilyDesc">
+            Would you like to confirm for additional family members at the same time?
+          </p>
+          <input type="text" id="familyMembers" placeholder="e.g. Conor Cahill, Cathy Cahill">
+        </div>
+
+        <div class="form-group">
+          <label id="lblEvents">Which events will you attend?</label>
+          <div class="checkbox-group" style="grid-template-columns: 1fr;">
+            <label class="checkbox-card">
+              <input type="checkbox" name="days" value="day1" checked>
+              <span id="txtDay1">Thu June 24: Winery Day (Cantina Santa Benedetta)</span>
+            </label>
+            <label class="checkbox-card">
+              <input type="checkbox" name="days" value="day2" checked>
+              <span id="txtDay2">Fri June 25: Wedding Ceremony & Reception (Villa Miani)</span>
+            </label>
+            <label class="checkbox-card">
+              <input type="checkbox" name="days" value="day3" checked>
+              <span id="txtDay3">Sat June 26: Recovery Pub Celebration (Scholars Lounge)</span>
+            </label>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label id="lblDietary">Dietary Restrictions</label>
+          <div class="checkbox-group">
+            <label class="checkbox-card"><input type="checkbox" name="dietary" value="vegetarian"><span id="dietVeg">Vegetarian</span></label>
+            <label class="checkbox-card"><input type="checkbox" name="dietary" value="vegan"><span id="dietVegan">Vegan</span></label>
+            <label class="checkbox-card"><input type="checkbox" name="dietary" value="nut_allergy"><span id="dietNut">Nut Allergy</span></label>
+            <label class="checkbox-card"><input type="checkbox" name="dietary" value="no_beef"><span id="dietBeef">No Beef</span></label>
+            <label class="checkbox-card"><input type="checkbox" name="dietary" value="no_pork"><span id="dietPork">No Pork</span></label>
+            <label class="checkbox-card"><input type="checkbox" name="dietary" value="shellfish"><span id="dietShell">Shellfish Allergy</span></label>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label id="lblPhone">WhatsApp Phone Number</label>
+          <input type="tel" id="guestPhone" placeholder="+353 ... or +55 ..." required>
+        </div>
+
+        <button type="submit" class="btn-submit" id="btnSubmit">Submit RSVP</button>
+      </form>
+    </div>
+
+    <div class="success-card" id="successScreen">
+      <h2 id="txtSuccessTitle">Thank You!</h2>
+      <p id="txtSuccessDesc">Your RSVP has been officially recorded in our wedding guestbook.</p>
+      
+      <a href="https://wa.me/5531982262520?text=Hi%20Aurora!%20I%20just%20submitted%20my%20RSVP." id="waLink" class="wa-btn" target="_blank">
+        💬 Chat with Aurora (AI Concierge)
+      </a>
+    </div>
+  </div>
+
+  <script>
+    // Config: Pointing straight to your Google Sheet Webhook
+    const SHEETS_WEBHOOK_URL = "https://script.google.com/macros/s/AKfycbyk7cq3dXzePP0VRq6HRaQgjGdY0radu4vtNDPhp1LpRWAik87pbK7LF0HlRLjWE6kuLA/exec";
+
+    let currentLang = 'en';
+
+    const translations = {
+      en: {
+        subHeader: "Rome • June 24–26, 2027",
+        lblFullTitle: "Your Full Name",
+        lblAttending: "Will you attend?",
+        txtYes: "Joyfully Accept",
+        txtNo: "Regretfully Decline",
+        lblFamilyTitle: "Family & Companions",
+        lblFamilyDesc: "Specify names of family members or companions included in this response:",
+        lblEvents: "Which events will you attend?",
+        txtDay1: "Thu June 24: Winery Day (Cantina Santa Benedetta)",
+        txtDay2: "Fri June 25: Wedding Ceremony & Reception (Villa Miani)",
+        txtDay3: "Sat June 26: Recovery Celebration (Scholars Lounge)",
+        lblDietary: "Dietary Restrictions",
+        dietVeg: "Vegetarian", dietVegan: "Vegan", dietNut: "Nut Allergy",
+        dietBeef: "No Beef", dietPork: "No Pork", dietShell: "Shellfish Allergy",
+        lblPhone: "WhatsApp Phone Number",
+        btnSubmit: "Submit RSVP",
+        txtSuccessTitle: "RSVP Confirmed!",
+        txtSuccessDesc: "We can't wait to celebrate with you in Rome! Need assistance with flights or hotel recommendations?",
+        waText: "💬 Chat with Aurora on WhatsApp"
+      },
+      pt: {
+        subHeader: "Roma • 24 a 26 de Junho de 2027",
+        lblFullTitle: "Seu Nome Completo",
+        lblAttending: "Você irá comparecer?",
+        txtYes: "Sim! Com certeza",
+        txtNo: "Infelizmente não poderei",
+        lblFamilyTitle: "Família e Acompanhantes",
+        lblFamilyDesc: "Informe os nomes dos familiares ou acompanhantes incluídos nesta resposta:",
+        lblEvents: "Quais eventos você irá comparecer?",
+        txtDay1: "24/06 (Quinta): Dia na Vinícola (Cantina Santa Benedetta)",
+        txtDay2: "25/06 (Sexta): Cerimônia & Festa de Casamento (Villa Miani)",
+        txtDay3: "26/06 (Sábado): Pub de Confraternização (Scholars Lounge)",
+        lblDietary: "Restrições Alimentares",
+        dietVeg: "Vegetariano", dietVegan: "Vegano", dietNut: "Alergia a Nozes",
+        dietBeef: "Sem Carne Vermelha", dietPork: "Sem Carne de Porco", dietShell: "Alergia a Frutos do Mar",
+        lblPhone: "Número do WhatsApp",
+        btnSubmit: "Confirmar Presença",
+        txtSuccessTitle: "Presença Confirmada!",
+        txtSuccessDesc: "Estamos muito felizes em comemorar com você em Roma! Precisa de ajuda com voos ou hospedagem?",
+        waText: "💬 Falar com a Aurora no WhatsApp"
+      }
+    };
+
+    function setLanguage(lang) {
+      currentLang = lang;
+      document.querySelectorAll('.lang-btn').forEach(b => b.classList.remove('active'));
+      event.target.classList.add('active');
+
+      const t = translations[lang];
+      for (let key in t) {
+        const el = document.getElementById(key);
+        if (el) el.innerText = t[key];
+      }
+    }
+
+    function checkFamilyGroup(name) {
+      const familyBox = document.getElementById('familySection');
+      // Dynamic hint trigger for known group leaders
+      if (name.length > 3) {
+        familyBox.style.display = 'block';
+      }
+    }
+
+    async function handleFormSubmit(e) {
+      e.preventDefault();
+      const btn = document.getElementById('btnSubmit');
+      btn.disabled = true;
+      btn.innerText = currentLang === 'en' ? 'Submitting...' : 'Enviando...';
+
+      const attendingVal = document.querySelector('input[name="attending"]:checked').value;
+      const selectedDays = Array.from(document.querySelectorAll('input[name="days"]:checked')).map(cb => cb.value);
+      const selectedDiet = Array.from(document.querySelectorAll('input[name="dietary"]:checked')).map(cb => cb.value);
+
+      const payload = {
+        type: "rsvp",
+        data: {
+          name: document.getElementById('guestName').value,
+          phone: document.getElementById('guestPhone').value,
+          attending: attendingVal,
+          plus_one: document.getElementById('familyMembers').value,
+          days: selectedDays,
+          dietary_vegetarian: selectedDiet.includes('vegetarian'),
+          dietary_vegan: selectedDiet.includes('vegan'),
+          dietary_nut_allergy: selectedDiet.includes('nut_allergy'),
+          dietary_no_beef: selectedDiet.includes('no_beef'),
+          dietary_no_pork: selectedDiet.includes('no_pork'),
+          dietary_shellfish: selectedDiet.includes('shellfish')
+        }
+      };
+
+      try {
+        if (SHEETS_WEBHOOK_URL && !SHEETS_WEBHOOK_URL.includes("YOUR_GOOGLE_APPS_SCRIPT")) {
+          await fetch(SHEETS_WEBHOOK_URL, {
+            method: 'POST',
+            mode: 'no-cors',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+        }
+      } catch (err) {
+        console.log("Submit sent", err);
+      }
+
+      document.getElementById('rsvpFormContainer').style.display = 'none';
+      document.getElementById('successScreen').style.display = 'block';
+    }
+  </script>
+</body>
+</html>
