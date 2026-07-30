@@ -12,12 +12,12 @@
     :root {
       --bg-color: #FAF8F5;
       --card-bg: #FFFFFF;
-      --primary: #2C3E35; /* Deep Roman Cypress Green */
-      --accent: #C5A059;  /* Warm Vintage Gold */
+      --primary: #2C3E35;
+      --accent: #C5A059;
       --text: #333333;
       --text-muted: #666666;
       --border: #E8E2D9;
-      --error: #A94442;
+      --pix-bg: #E8F5E9;
     }
 
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -26,8 +26,8 @@
       font-family: 'Montserrat', sans-serif;
       background-color: var(--bg-color);
       color: var(--text);
-      line-height: 1.6;
-      padding: 40px 20px;
+      line-height: 1.5;
+      padding: 30px 15px;
       display: flex;
       justify-content: center;
       align-items: center;
@@ -36,11 +36,11 @@
 
     .container {
       width: 100%;
-      max-width: 650px;
+      max-width: 680px;
       background: var(--card-bg);
       border: 1px solid var(--border);
       border-radius: 12px;
-      padding: 40px 30px;
+      padding: 35px 25px;
       box-shadow: 0 10px 30px rgba(0, 0, 0, 0.04);
       position: relative;
     }
@@ -50,7 +50,7 @@
       top: 20px;
       right: 20px;
       display: flex;
-      gap: 8px;
+      gap: 6px;
     }
 
     .lang-btn {
@@ -61,7 +61,6 @@
       letter-spacing: 1px;
       cursor: pointer;
       border-radius: 20px;
-      transition: all 0.2s ease;
     }
 
     .lang-btn.active {
@@ -72,20 +71,20 @@
 
     .header {
       text-align: center;
-      margin-bottom: 35px;
+      margin-bottom: 30px;
     }
 
     .header h1 {
       font-family: 'Cinzel', serif;
-      font-size: 2rem;
-      letter-spacing: 3px;
+      font-size: 1.8rem;
+      letter-spacing: 2px;
       color: var(--primary);
       text-transform: uppercase;
-      margin-bottom: 8px;
+      margin-bottom: 6px;
     }
 
     .header p {
-      font-size: 0.85rem;
+      font-size: 0.8rem;
       letter-spacing: 2px;
       text-transform: uppercase;
       color: var(--accent);
@@ -93,7 +92,7 @@
     }
 
     .form-group {
-      margin-bottom: 25px;
+      margin-bottom: 22px;
     }
 
     label {
@@ -106,67 +105,63 @@
       color: var(--primary);
     }
 
-    input[type="text"], input[type="tel"], select {
+    input[type="text"], input[type="tel"], input[type="email"], select, textarea {
       width: 100%;
-      padding: 14px 16px;
+      padding: 12px 14px;
       border: 1px solid var(--border);
       border-radius: 6px;
       font-family: 'Montserrat', sans-serif;
-      font-size: 0.95rem;
+      font-size: 0.9rem;
       background: #FAF9F7;
       color: var(--text);
-      transition: border-color 0.2s;
-    }
-
-    input:focus, select:focus {
-      outline: none;
-      border-color: var(--accent);
-      background: #FFF;
     }
 
     .radio-group, .checkbox-group {
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 12px;
-      margin-top: 8px;
+      gap: 10px;
     }
 
     .radio-card, .checkbox-card {
       border: 1px solid var(--border);
-      padding: 14px;
+      padding: 12px;
       border-radius: 6px;
       cursor: pointer;
       display: flex;
       align-items: center;
-      gap: 10px;
-      font-size: 0.9rem;
+      gap: 8px;
+      font-size: 0.85rem;
       background: #FAF9F7;
-      transition: all 0.2s;
     }
 
-    .radio-card:hover, .checkbox-card:hover {
-      border-color: var(--accent);
-    }
-
-    .radio-card input, .checkbox-card input {
+    .checkbox-card input, .radio-card input {
       accent-color: var(--primary);
-      width: 18px;
-      height: 18px;
+      width: 16px;
+      height: 16px;
     }
 
-    .family-box {
-      background: #F4F0EA;
-      padding: 20px;
+    .box-section {
+      background: #FAF6F0;
+      padding: 18px;
       border-radius: 8px;
       border-left: 4px solid var(--accent);
-      margin-bottom: 25px;
+      margin-bottom: 22px;
     }
 
-    .family-box h3 {
+    .box-section h3 {
       font-family: 'Cinzel', serif;
-      font-size: 1rem;
+      font-size: 0.95rem;
       color: var(--primary);
-      margin-bottom: 10px;
+      margin-bottom: 8px;
+    }
+
+    .pix-box {
+      background: var(--pix-bg);
+      border: 1px dashed #2E7D32;
+      padding: 12px;
+      border-radius: 6px;
+      font-size: 0.85rem;
+      margin: 10px 0;
     }
 
     .btn-submit {
@@ -181,12 +176,19 @@
       text-transform: uppercase;
       border-radius: 6px;
       cursor: pointer;
-      transition: background 0.2s;
-      margin-top: 10px;
     }
 
-    .btn-submit:hover {
-      background: #1D2A24;
+    .btn-add-guest {
+      background: transparent;
+      border: 1px dashed var(--accent);
+      color: var(--primary);
+      padding: 10px;
+      width: 100%;
+      border-radius: 6px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      cursor: pointer;
+      margin-top: 10px;
     }
 
     .success-card {
@@ -195,23 +197,16 @@
       padding: 20px 0;
     }
 
-    .success-card h2 {
-      font-family: 'Cinzel', serif;
-      color: var(--primary);
-      margin-bottom: 12px;
-    }
-
     .wa-btn {
       display: inline-block;
-      margin-top: 20px;
+      margin-top: 18px;
       background: #25D366;
       color: white;
       text-decoration: none;
-      padding: 14px 24px;
+      padding: 12px 22px;
       border-radius: 30px;
       font-weight: 600;
-      font-size: 0.9rem;
-      letter-spacing: 0.5px;
+      font-size: 0.85rem;
     }
   </style>
 </head>
@@ -230,11 +225,15 @@
       </div>
 
       <form id="rsvpForm" onsubmit="handleFormSubmit(event)">
+        <!-- Name Selection Dropdown -->
         <div class="form-group">
-          <label id="lblFullTitle">Your Full Name</label>
-          <input type="text" id="guestName" placeholder="e.g. Linda Cahill" required oninput="checkFamilyGroup(this.value)">
+          <label id="lblFullTitle">Select Your Name</label>
+          <select id="guestDropdown" required onchange="onGuestSelected(this.value)">
+            <option value="">-- Choose your name --</option>
+          </select>
         </div>
 
+        <!-- Attendance -->
         <div class="form-group">
           <label id="lblAttending">Will you attend?</label>
           <div class="radio-group">
@@ -249,16 +248,15 @@
           </div>
         </div>
 
-        <div class="family-box" id="familySection" style="display: none;">
-          <h3 id="lblFamilyTitle">Family & Companions</h3>
-          <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 12px;" id="lblFamilyDesc">
-            Would you like to confirm for additional family members at the same time?
-          </p>
-          <input type="text" id="familyMembers" placeholder="e.g. Conor Cahill, Cathy Cahill">
-        </div>
+        <!-- Additional Guests / Companions -->
+        <div id="companionContainer"></div>
+        <button type="button" class="btn-add-guest" id="btnAddPlusOne" onclick="addPlusOneField()">+ Add Family Member / Plus One</button>
 
+        <div style="margin-top: 25px;"></div>
+
+        <!-- Events Attending -->
         <div class="form-group">
-          <label id="lblEvents">Which events will you attend?</label>
+          <label id="lblEvents">Events Attending</label>
           <div class="checkbox-group" style="grid-template-columns: 1fr;">
             <label class="checkbox-card">
               <input type="checkbox" name="days" value="day1" checked>
@@ -275,6 +273,19 @@
           </div>
         </div>
 
+        <!-- Church Elevator Question -->
+        <div class="box-section">
+          <h3 id="lblElevatorTitle">Church Ceremony Accessibility (Santa Maria in Aracoeli)</h3>
+          <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 10px;" id="lblElevatorDesc">
+            ⚠️ The basilica has 124 steps. Elevator access is strictly limited and reserved primarily for guests with mobility issues, pregnant women, or families with small infants.
+          </p>
+          <label class="checkbox-card">
+            <input type="checkbox" id="chkElevator">
+            <span id="txtElevatorOpt">I / someone in my party requires elevator access for the church</span>
+          </label>
+        </div>
+
+        <!-- Dietary Requirements -->
         <div class="form-group">
           <label id="lblDietary">Dietary Restrictions</label>
           <div class="checkbox-group">
@@ -287,15 +298,44 @@
           </div>
         </div>
 
+        <!-- Phone Number -->
         <div class="form-group">
           <label id="lblPhone">WhatsApp Phone Number</label>
-          <input type="tel" id="guestPhone" placeholder="+353 ... or +55 ..." required>
+          <input type="tel" id="guestPhone" placeholder="+353... or +55..." required>
+        </div>
+
+        <!-- Brazilian Passport Help Section (Only in Portuguese mode / BR guests) -->
+        <div class="box-section" id="passportSection" style="display: none;">
+          <h3>🛂 Ajuda com Passaporte Brasileiro</h3>
+          <p style="font-size: 0.8rem; color: var(--text-muted);">
+            A Larissa está ajudando os convidados a agendar o passaporte na Polícia Federal. Se você precisa tirar ou renovar o seu, preencha os dados abaixo.
+          </p>
+          
+          <div class="pix-box">
+            <b>Taxa da Polícia Federal: R$ 257,25 (Comum)</b><br>
+            Chave PIX (Larissa): <code>13005770613</code><br>
+            <i>Envie o comprovante para a Larissa após realizar o PIX.</i>
+          </div>
+
+          <label class="checkbox-card" style="margin-bottom: 12px;">
+            <input type="checkbox" id="chkNeedPassport" onchange="togglePassportFields(this.checked)">
+            <span>Quero que a Larissa faça meu agendamento na PF</span>
+          </label>
+
+          <div id="passportFields" style="display: none; grid-gap: 10px;">
+            <input type="text" id="pfCPF" placeholder="CPF">
+            <input type="text" id="pfDOB" placeholder="Data de Nascimento (DD/MM/AAAA)">
+            <input type="text" id="pfMother" placeholder="Nome Completo da Mãe">
+            <input type="text" id="pfAddress" placeholder="Endereço Completo com CEP">
+            <input type="text" id="pfCity" placeholder="Cidade de preferência para o agendamento">
+          </div>
         </div>
 
         <button type="submit" class="btn-submit" id="btnSubmit">Submit RSVP</button>
       </form>
     </div>
 
+    <!-- Success Screen -->
     <div class="success-card" id="successScreen">
       <h2 id="txtSuccessTitle">Thank You!</h2>
       <p id="txtSuccessDesc">Your RSVP has been officially recorded in our wedding guestbook.</p>
@@ -307,28 +347,60 @@
   </div>
 
   <script>
-    // Config: Pointing straight to your Google Sheet Webhook
     const SHEETS_WEBHOOK_URL = "https://script.google.com/macros/s/AKfycbyk7cq3dXzePP0VRq6HRaQgjGdY0radu4vtNDPhp1LpRWAik87pbK7LF0HlRLjWE6kuLA/exec";
+
+    // Master Guest List with linked pairs/families
+    const GUEST_DATABASE = [
+      { name: "Robert Daly" }, { name: "Larissa Daly" }, { name: "Michael Daly" }, 
+      { name: "Mary Daly", linked: ["Christopher Daly"] },
+      { name: "Linda Cahill", linked: ["Conor Cahill", "Cathy Cahill", "Ayla Cahill", "Avean Cahill", "Caera Cahill"] },
+      { name: "Will Daly", linked: ["Ezgi Atakul"] },
+      { name: "Brendan Daly", linked: ["Deirdre Daly"] },
+      { name: "Chris Daly", linked: ["Guest (Chris Daly)"] },
+      { name: "Cian Mc Donnell", linked: ["Guest (Cian)"] },
+      { name: "Corey Brennan", linked: ["Guest (Corey)"] },
+      { name: "George O Mahony", linked: ["Charlotte Barton"] },
+      { name: "James Roche", linked: ["Guest (James Roche)"] },
+      { name: "Luke Mccarthty", linked: ["Guest (Luke)"] },
+      { name: "Sean Murphy", linked: ["Joanne Murphy"] },
+      { name: "Patrick Fitzgibbon", linked: ["Stephanie Fitzgibbon"] },
+      { name: "Shane Burke", linked: ["Guest (Shane Burke)"] },
+      { name: "Shane Galvin", linked: ["Rebecca Perrott"] },
+      { name: "Mikey O Donovan", linked: ["Guest (Mikey)"] },
+      { name: "Peter Olden", linked: ["Guest (Peter)"] },
+      { name: "Pauline Olden" },
+      { name: "Mike O'Riordan", linked: ["Guest (Mike O'Riordan)"] },
+      { name: "Donica O'Leary" },
+      { name: "Kevin Brennan", linked: ["Niamh Brennan"] },
+      { name: "Dylan Leahy", linked: ["Guest (Dylan)"] },
+      { name: "Shane Fitzgerald", linked: ["Guest (Shane)"] },
+      { name: "Laura Teixeira", isPT: true },
+      { name: "Anna Laura Teixeira", isPT: true },
+      { name: "Fabiano Lima", linked: ["Jhenifer Bering", "Alexia Lima"], isPT: true },
+      { name: "Jadeilson Lima", isPT: true }
+    ];
 
     let currentLang = 'en';
 
     const translations = {
       en: {
         subHeader: "Rome • June 24–26, 2027",
-        lblFullTitle: "Your Full Name",
+        lblFullTitle: "Select Your Name",
         lblAttending: "Will you attend?",
         txtYes: "Joyfully Accept",
         txtNo: "Regretfully Decline",
-        lblFamilyTitle: "Family & Companions",
-        lblFamilyDesc: "Specify names of family members or companions included in this response:",
-        lblEvents: "Which events will you attend?",
+        lblEvents: "Events Attending",
         txtDay1: "Thu June 24: Winery Day (Cantina Santa Benedetta)",
         txtDay2: "Fri June 25: Wedding Ceremony & Reception (Villa Miani)",
-        txtDay3: "Sat June 26: Recovery Celebration (Scholars Lounge)",
+        txtDay3: "Sat June 26: Recovery Pub Celebration (Scholars Lounge)",
+        lblElevatorTitle: "Church Ceremony Accessibility (Santa Maria in Aracoeli)",
+        lblElevatorDesc: "⚠️ The basilica has 124 steps. Elevator access is strictly limited and reserved primarily for guests with mobility issues, pregnant women, or families with small infants.",
+        txtElevatorOpt: "I / someone in my party requires elevator access for the church",
         lblDietary: "Dietary Restrictions",
         dietVeg: "Vegetarian", dietVegan: "Vegan", dietNut: "Nut Allergy",
         dietBeef: "No Beef", dietPork: "No Pork", dietShell: "Shellfish Allergy",
         lblPhone: "WhatsApp Phone Number",
+        btnAddPlusOne: "+ Add Family Member / Plus One",
         btnSubmit: "Submit RSVP",
         txtSuccessTitle: "RSVP Confirmed!",
         txtSuccessDesc: "We can't wait to celebrate with you in Rome! Need assistance with flights or hotel recommendations?",
@@ -336,26 +408,39 @@
       },
       pt: {
         subHeader: "Roma • 24 a 26 de Junho de 2027",
-        lblFullTitle: "Seu Nome Completo",
+        lblFullTitle: "Selecione Seu Nome",
         lblAttending: "Você irá comparecer?",
         txtYes: "Sim! Com certeza",
         txtNo: "Infelizmente não poderei",
-        lblFamilyTitle: "Família e Acompanhantes",
-        lblFamilyDesc: "Informe os nomes dos familiares ou acompanhantes incluídos nesta resposta:",
-        lblEvents: "Quais eventos você irá comparecer?",
+        lblEvents: "Eventos que Irá Comparecer",
         txtDay1: "24/06 (Quinta): Dia na Vinícola (Cantina Santa Benedetta)",
         txtDay2: "25/06 (Sexta): Cerimônia & Festa de Casamento (Villa Miani)",
         txtDay3: "26/06 (Sábado): Pub de Confraternização (Scholars Lounge)",
+        lblElevatorTitle: "Acessibilidade na Igreja (Santa Maria in Aracoeli)",
+        lblElevatorDesc: "⚠️ A basílica possui 124 degraus. O elevador é estritamente limitado e reservado principalmente para pessoas com mobilidade reduzida, grávidas ou famílias com bebês de colo.",
+        txtElevatorOpt: "Eu / alguém do meu grupo precisa do elevador para a igreja",
         lblDietary: "Restrições Alimentares",
         dietVeg: "Vegetariano", dietVegan: "Vegano", dietNut: "Alergia a Nozes",
         dietBeef: "Sem Carne Vermelha", dietPork: "Sem Carne de Porco", dietShell: "Alergia a Frutos do Mar",
         lblPhone: "Número do WhatsApp",
+        btnAddPlusOne: "+ Adicionar Acompanhante / Familiar",
         btnSubmit: "Confirmar Presença",
         txtSuccessTitle: "Presença Confirmada!",
         txtSuccessDesc: "Estamos muito felizes em comemorar com você em Roma! Precisa de ajuda com voos ou hospedagem?",
         waText: "💬 Falar com a Aurora no WhatsApp"
       }
     };
+
+    function initDropdown() {
+      const dd = document.getElementById('guestDropdown');
+      GUEST_DATABASE.sort((a,b) => a.name.localeCompare(b.name)).forEach(g => {
+        const opt = document.createElement('option');
+        opt.value = g.name;
+        opt.innerText = g.name;
+        dd.appendChild(opt);
+      });
+    }
+    initDropdown();
 
     function setLanguage(lang) {
       currentLang = lang;
@@ -367,14 +452,37 @@
         const el = document.getElementById(key);
         if (el) el.innerText = t[key];
       }
+
+      document.getElementById('passportSection').style.display = lang === 'pt' ? 'block' : 'none';
     }
 
-    function checkFamilyGroup(name) {
-      const familyBox = document.getElementById('familySection');
-      // Dynamic hint trigger for known group leaders
-      if (name.length > 3) {
-        familyBox.style.display = 'block';
+    function onGuestSelected(name) {
+      const container = document.getElementById('companionContainer');
+      container.innerHTML = '';
+      const guest = GUEST_DATABASE.find(g => g.name === name);
+
+      if (guest && guest.isPT) setLanguage('pt');
+
+      if (guest && guest.linked) {
+        guest.linked.forEach(compName => {
+          addPlusOneField(compName);
+        });
       }
+    }
+
+    function addPlusOneField(defaultName = "") {
+      const container = document.getElementById('companionContainer');
+      const div = document.createElement('div');
+      div.className = 'form-group';
+      div.innerHTML = `
+        <label>Companion / Family Member Name</label>
+        <input type="text" class="companion-input" value="${defaultName}" placeholder="Full Name">
+      `;
+      container.appendChild(div);
+    }
+
+    function togglePassportFields(show) {
+      document.getElementById('passportFields').style.display = show ? 'grid' : 'none';
     }
 
     async function handleFormSubmit(e) {
@@ -383,18 +491,23 @@
       btn.disabled = true;
       btn.innerText = currentLang === 'en' ? 'Submitting...' : 'Enviando...';
 
+      const primaryName = document.getElementById('guestDropdown').value;
       const attendingVal = document.querySelector('input[name="attending"]:checked').value;
       const selectedDays = Array.from(document.querySelectorAll('input[name="days"]:checked')).map(cb => cb.value);
       const selectedDiet = Array.from(document.querySelectorAll('input[name="dietary"]:checked')).map(cb => cb.value);
+      const needsElevator = document.getElementById('chkElevator').checked;
+      const needsPassport = document.getElementById('chkNeedPassport') ? document.getElementById('chkNeedPassport').checked : false;
 
+      // Submit Primary Guest
       const payload = {
         type: "rsvp",
         data: {
-          name: document.getElementById('guestName').value,
+          name: primaryName,
           phone: document.getElementById('guestPhone').value,
           attending: attendingVal,
-          plus_one: document.getElementById('familyMembers').value,
           days: selectedDays,
+          needs_elevator: needsElevator,
+          needs_passport: needsPassport,
           dietary_vegetarian: selectedDiet.includes('vegetarian'),
           dietary_vegan: selectedDiet.includes('vegan'),
           dietary_nut_allergy: selectedDiet.includes('nut_allergy'),
@@ -405,16 +518,55 @@
       };
 
       try {
-        if (SHEETS_WEBHOOK_URL && !SHEETS_WEBHOOK_URL.includes("YOUR_GOOGLE_APPS_SCRIPT")) {
+        await fetch(SHEETS_WEBHOOK_URL, {
+          method: 'POST',
+          mode: 'no-cors',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+
+        // Submit Companions
+        const compInputs = document.querySelectorAll('.companion-input');
+        for (let input of compInputs) {
+          if (input.value.trim()) {
+            await fetch(SHEETS_WEBHOOK_URL, {
+              method: 'POST',
+              mode: 'no-cors',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                type: "rsvp",
+                data: {
+                  name: input.value.trim(),
+                  attending: attendingVal,
+                  days: selectedDays,
+                  needs_elevator: needsElevator
+                }
+              })
+            });
+          }
+        }
+
+        // Submit Passport details if requested
+        if (needsPassport) {
           await fetch(SHEETS_WEBHOOK_URL, {
             method: 'POST',
             mode: 'no-cors',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
+            body: JSON.stringify({
+              type: "passport_submission",
+              data: {
+                name: primaryName,
+                cpf: document.getElementById('pfCPF').value,
+                dob: document.getElementById('pfDOB').value,
+                mother: document.getElementById('pfMother').value,
+                address: document.getElementById('pfAddress').value,
+                pf_city: document.getElementById('pfCity').value
+              }
+            })
           });
         }
       } catch (err) {
-        console.log("Submit sent", err);
+        console.log("Submitted", err);
       }
 
       document.getElementById('rsvpFormContainer').style.display = 'none';
