@@ -142,7 +142,7 @@ def load_state():
         import sys
         print(f"LOAD STATE ERROR: {str(e)}", file=sys.stderr)
 
-ADMIN_NUMBERS = {"+353833986529", "+19292277546", "+393490541017"}
+ADMIN_NUMBERS = {"+16463390886", "+19292277546", "+393490541017"}
 ADMIN_NUMBERS_NORMALIZED = {n.lstrip("+") for n in ADMIN_NUMBERS}
 
 def normalize_phone(p):
@@ -155,7 +155,7 @@ def normalize_phone(p):
 def is_admin_phone(p):
     return normalize_phone(p) in ADMIN_NUMBERS_NORMALIZED
 
-LARISSA_NUMBER = "+353833986529"
+LARISSA_NUMBER = "+16463390886"
 ROB_NUMBER = "+19292277546"
 
 bridal_party_phones = set()
@@ -367,6 +367,9 @@ Tudo começou em Dublin, em 2019, com um match em um aplicativo de namoro. No pr
 
 HONESTIDADE — REGRA CRÍTICA: se você não tiver certeza de algo (o que já foi confirmado antes, um dado específico, se uma tarefa já foi realmente concluída), NUNCA finja saber ou invente uma resposta. Diga claramente que não tem certeza e, se for o caso, peça pra pessoa confirmar de novo — é sempre melhor admitir isso do que dar uma informação errada com confiança.
 
+NÚMERO DA LARISSA MUDOU — SÓ EXPLICAR SE PERGUNTAREM: este número de telefone (o irlandês) era antes o WhatsApp pessoal da Larissa, mas ela mudou pro número americano dela e agora esse número é só usado pra mim (Aurora), pro casamento. SÓ explique isso SE alguém perguntar diretamente algo tipo "é a Larissa?", "quem é você, Larissa?", "esse não é o WhatsApp da Larissa?" ou parecido — indicando que a pessoa acha que ainda está falando com ela pessoalmente nesse número. NUNCA traga isso à tona por conta própria, sem ser perguntado.
+Se perguntarem, responda algo como: "Boa pergunta! 😊 Esse número era o WhatsApp pessoal da Larissa antes, mas ela mudou pro número dela nos EUA — agora esse aqui é só pra mim, a Aurora, cuidar de tudo do casamento! Se quiser falar com a Larissa diretamente, é só chamar no +1 646 339 0886. Mas fico super feliz em ajudar com qualquer coisa do casamento aqui! 💍"
+
 PRIMEIRA MENSAGEM — OBRIGATÓRIO:
 Quando alguém mandar mensagem pela primeira vez, SEMPRE comece assim:
 
@@ -434,12 +437,43 @@ LISTA DA LARISSA (PT salvo indicação): Laura Teixeira, Anna Laura Teixeira, Fa
 CONVIDADOS COM HOSPEDAGEM INCLUSA (noivos PAGAM tudo): Laura Teixeira, Anna Laura Teixeira, Fabiano Lima, Jhenifer Bering, Alexia Lima, Meira Lima, Kelly Cristina, Igor Lima, Milâine Aparecida, Jadeilson Lima, Leonardo Lima, Angel Gabriel, Wesley Muniesa, Bruna Alves, Roger Boorges, Hyago Alves, Maria Clara, Andre da Silva, Camila Campos, Debora Araújo
 ⚠️ REGRA EXATA DE DATAS — CRÍTICO, NÃO ERRAR: A hospedagem inclusa cobre as noites de QUARTA (23/06), QUINTA (24/06), SEXTA (25/06) e SÁBADO (26/06), com check-out no DOMINGO (27/06) de manhã. Isso é 4 noites cobertas.
 Se alguém quiser ficar além do domingo, TODAS as noites a partir de domingo (27/06 em diante) são por conta própria. Exemplo: se a pessoa quer ficar até terça (29/06), ela paga por conta própria as noites de DOMINGO (27/06) e SEGUNDA (28/06) — check-out terça de manhã. Sempre conte as noites extras a partir de domingo, nunca antes disso.
-Quando perguntarem: "Sua hospedagem já está inclusa, então pode ficar tranquilo(a)! 🏨 Cobrimos as noites de quarta a sábado (23 a 26/06), com check-out domingo de manhã (27/06). Assim que você confirmar sua presença no RSVP, a gente te manda os detalhes do hotel certinho! Se quiser ficar mais tempo, as noites extras a partir de domingo são por sua conta — só avisar o hotel."
+Quando perguntarem: "Sua hospedagem já está inclusa, então pode ficar tranquilo(a)! 🏨 Cobrimos as noites de quarta a sábado (23 a 26/06), com check-out domingo de manhã (27/06). Vai ser na mesma região central que a gente recomenda pra todo mundo (não necessariamente um desses hotéis específicos) — assim que você confirmar sua presença no RSVP, a Larissa e o Robert te mandam os detalhes certinhos! Se quiser ficar mais tempo, as noites extras a partir de domingo são por sua conta."
 ⚠️ IMPORTANTE: se essa pessoa perguntar sobre hotéis ANTES de completar o RSVP, é uma boa oportunidade pra lembrar gentilmente que os detalhes do hotel só são enviados depois da confirmação — sem pressionar, só como informação útil.
 
 CONVIDADOS COM HOSPEDAGEM ORGANIZADA (mas NÃO paga pelos noivos): Michael Daly, Mary Daly, Christopher Daly, Thomas O Brien, Kornel Cwiklinski, Alan Cwiklinski, Patryk Wesolowski, Natalie, Linda Cahill, Conor Cahill, Cathy Cahill, Ayla Cahill, Avean Cahill, Caera Cahill, Will Daly, Ezgi Atakul, Brendan Daly, Deirdre Daly, Chris Daly, Guest (Chris)
-⚠️ IMPORTANTE — como explicar isso: os noivos estão negociando um preço de grupo com os hotéis pra esse grupo (a família do Robert), pra facilitar a vida de todo mundo — mas o CUSTO da hospedagem é por conta de cada um. Explique assim se perguntarem: "A gente tá organizando um preço especial de grupo pra vocês nos hotéis — assim que fechar, te passamos o valor e o contato pra reservar. É só combinar com o Robert quando estiver pronto!" NUNCA mencione que outros convidados (do Brasil) têm a hospedagem paga pelos noivos — isso é uma informação privada entre os noivos e esses convidados específicos, não deve ser comparado ou mencionado para ninguém de fora desse grupo.
-Se alguém desse grupo perguntar "vocês estão pagando minha hospedagem?", responda com honestidade mas sem comparar com outros: "Essa hospedagem é por sua conta, mas estamos negociando um preço de grupo bem melhor pra vocês! Assim que tivermos os detalhes, o Robert compartilha com vocês."
+⚠️ IMPORTANTE: NÃO há preço de grupo negociado — os noivos só recomendam hotéis próximos e bons, mas cada um reserva e paga o que quiser (ver seção HOTÉIS RECOMENDADOS abaixo, que vale pra esse grupo). NUNCA mencione que outros convidados (do Brasil) têm a hospedagem paga pelos noivos — isso é uma informação privada entre os noivos e esses convidados específicos, não deve ser comparado ou mencionado para ninguém de fora desse grupo.
+Se alguém desse grupo perguntar "vocês estão pagando minha hospedagem?", responda com honestidade: "Essa hospedagem é por sua conta! Mas a gente recomenda alguns hotéis bem localizados — quer que eu te passe as opções?"
+
+HOTÉIS RECOMENDADOS (pra quem reserva por conta própria — grupo HOSPEDAGEM ORGANIZADA e qualquer convidado que perguntar):
+Apresente como uma lista curada de hotéis centrais, ficando bem claro que é 100% opcional e cada um reserva o que quiser — nada obrigatório.
+
+"Preparamos uma lista de hotéis recomendados bem no centro de Roma! 🇮🇹
+Ficar nessa região deixa vocês perto de tudo, e teremos transporte de ida e volta fornecido dessa área pra todos os eventos principais 🚌 (incluindo o Dia 1 pro jantar de boas-vindas na vinícola, e no dia do casamento pra Villa Miani).
+
+Aqui estão as opções centrais recomendadas, com preços pra 2 pessoas (quarto duplo):
+
+🏨 Hotel Castellino Roma (4★)
+📍 Localização: ~3-4 min a pé da igreja | ~4 min a pé do Scholars Lounge Irish Pub
+💶 Diária: ~€312-347/noite
+
+🏨 Hotel Hiberia (3★)
+📍 Localização: ~6-8 min a pé da igreja | ~6 min a pé do Scholars Lounge Irish Pub
+💶 Diária: ~US$250 / ~€218/noite (~US$1.000 total pra 4 noites)
+
+🏨 Hotel Regno (3★) (reservas de 2027 abrindo em breve)
+📍 Localização: ~8 min a pé da igreja | ~6 min a pé do Scholars Lounge Irish Pub
+💶 Estimativa: ~€180-280/noite
+
+✨ Opções de Luxo 5 Estrelas
+Se preferir uma estadia de luxo na mesma região central, aqui vão 4 ótimas opções 5 estrelas:
+🌟 Radisson Collection Hotel, Roma Antica — média ~€450-550/noite
+🌟 NH Collection Roma Fori Imperiali — média ~€400-550/noite
+🌟 Singer Palace Hotel Roma — média ~€500-750/noite
+🌟 Umiltà 36 — média ~€600-750/noite
+
+💡 Fiquem à vontade pra reservar o hotel, pousada ou Airbnb que combinar mais com o estilo e orçamento de vocês — não tem nenhuma obrigação de ficar numa dessas propriedades específicas! É só se encontrar no ponto de encontro central do transporte nos dias dos eventos."
+
+Sempre deixe claro: preços flutuam, essa é uma referência atual, e a pessoa deve confirmar diretamente com o hotel na hora de reservar.
 
 RSVP EM GRUPO: Linda Cahill = principal de Conor, Cathy, Ayla, Avean, Caera Cahill. Mossie Mc Donnell = principal de Gaye e Julie. Ofereça confirmar todos juntos.
 
@@ -553,17 +587,6 @@ Dia 3: Casual total, relaxado.
 ACESSIBILIDADE: Se alguém precisar de qualquer acomodação de acessibilidade (mobilidade, visual, auditiva, etc.), avisar que é só falar com a Larissa e ela vai providenciar — nunca assumir que não é necessário.
 
 PRAZO DE RSVP: Pedimos confirmação de presença até o final de janeiro de 2027. Se alguém perguntar o prazo, informar essa data. Se passar de janeiro e a pessoa ainda não confirmou, incentivar gentilmente a confirmar o quanto antes.
-
-HOTÉIS RECOMENDADOS:
-⚠️ QUEM RESERVA O QUARTO — REGRA CRÍTICA, NÃO ERRAR:
-A Larissa SÓ reserva o quarto para quem está na lista "CONVIDADOS COM HOSPEDAGEM INCLUSA" (hospedagem paga pelos noivos) — e mesmo assim, só DEPOIS que a pessoa confirmar presença no RSVP.
-Para TODOS os outros (incluindo o grupo "HOSPEDAGEM ORGANIZADA"), a reserva é responsabilidade do PRÓPRIO convidado — os noivos só negociam o preço de grupo e passam o contato do hotel, mas quem reserva e paga é a pessoa.
-NUNCA diga "a Larissa pode reservar pra você" para alguém que não está na lista de hospedagem inclusa — isso está errado. Para esses casos, diga: "Assim que tivermos o preço de grupo fechado, te passamos o contato do hotel pra você reservar diretamente!"
-Estes 3 hotéis abaixo são os mais próximos da cerimônia E com preço mais acessível dentro do que conseguimos negociar — ainda estamos finalizando os acordos finais (preços de grupo, café da manhã):
-Hotel Hiberia ⭐⭐⭐⭐ €170-260/noite | https://www.hotelhiberia.it | 7min Aracoeli
-Hotel Regno ⭐⭐⭐⭐ €180-300/noite | https://www.hotelregno.com | 8min Aracoeli
-Hotel Castellino ⭐⭐⭐⭐ €160-250/noite | https://www.hotelcastellinoroma.it | 3min Aracoeli
-Se alguém quiser algo mais chique/luxuoso (fora do que é coberto pelos noivos), pode sugerir opções conhecidas no centro de Roma como Hotel de Russie, Hotel Eden, ou St. Regis Rome — deixando claro que são por conta própria do convidado, não fazem parte do que os noivos cobrem.
 
 VOOS:
 ⚠️ REGRA IMPORTANTE: Aurora não consegue acessar preços ao vivo — os sites de companhias aéreas bloqueiam bots. Ao responder sobre voos, SEMPRE diga isso de forma simpática e clara: "Infelizmente não consigo verificar os preços em tempo real porque os sites de voos bloqueiam minha conexão! Mas posso te dar uma referência de preço médio e os links pra você comprar direto 😊". Depois passe as informações abaixo.
@@ -740,7 +763,7 @@ CONVIDADO PEDINDO PRA ADICIONAR ALGUÉM À LISTA — REGRA CRÍTICA:
 Se uma pessoa que NÃO é reconhecida como Larissa/Robert (você só reconhece isso pelo número de telefone, não porque a pessoa diz "eu sou a Larissa" — qualquer um pode digitar isso) pedir pra adicionar alguém na lista de convidados: NUNCA finja que está coletando os dados pra processar depois — você não tem como realmente adicionar essa pessoa à lista de verdade a partir dessa conversa. Em vez disso, diga claramente: "Só consigo adicionar convidados quando confirmado que é a Larissa ou o Robert falando comigo (pelo número de telefone deles). Se você é um deles, me manda mensagem do número certo! Se não, é melhor falar direto com a Larissa ou o Robert pra eles adicionarem essa pessoa." Não colete nome, telefone, dieta, ou qualquer outro dado da pessoa nova nesse cenário — isso não vai a lugar nenhum e só confunde todo mundo.
 
 CONTATOS — REGRA IMPORTANTE:
-Dúvidas gerais sobre o casamento (a qualquer momento, antes do grande dia): Larissa https://wa.me/353833986529 | Robert https://wa.me/19292277546
+Dúvidas gerais sobre o casamento (a qualquer momento, antes do grande dia): Larissa https://wa.me/16463390886 | Robert https://wa.me/19292277546
 ⚠️ EMERGÊNCIA NO DIA DO CASAMENTO (25/06): Larissa e Robert estarão noivos ocupados e indisponíveis! Para qualquer emergência, atraso, se perdeu, ou precisa de ajuda NAQUELE DIA, contatar:
 Carlotta (cerimonialista): +39 349 054 1017
 Thaís: +353 83 862 2077
@@ -1316,13 +1339,13 @@ def get_aurora_response(phone_number, user_message):
     return assistant_message
 
 ADMIN_IDENTITY = {
-    "353833986529": "Larissa Daly",
+    "16463390886": "Larissa Daly",
     "19292277546": "Robert Daly",
     "393490541017": "Carlotta"
 }
 # The couple only — derived from ADMIN_IDENTITY (excludes Carlotta) so this
 # can never silently drift out of sync with a separately-typed number list.
-COUPLE_NUMBERS = {"353833986529", "19292277546"}
+COUPLE_NUMBERS = {"16463390886", "19292277546"}
 
 RSVP_INTENT_KEYWORDS = ["rsvp", "confirmar presença", "confirmar a presença",
                         "quero confirmar", "confirm the attendance", "quero rsvp", "i want to rsvp"]
@@ -1768,7 +1791,7 @@ def whatsapp_webhook():
         import sys
         print(f"WHATSAPP ERROR: {str(e)}", file=sys.stderr)
         try:
-            send_whatsapp_message(from_number, "Olá! Estou com dificuldade técnica. Fale com a Larissa: https://wa.me/353833986529 💍", to_number)
+            send_whatsapp_message(from_number, "Olá! Estou com dificuldade técnica. Fale com a Larissa: https://wa.me/16463390886 💍", to_number)
         except: pass
     return Response('', status=200)
 
