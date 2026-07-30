@@ -229,7 +229,7 @@
         <div class="form-group">
           <label id="lblFullTitle">Select Your Name</label>
           <select id="guestDropdown" required onchange="onGuestSelected(this.value)">
-            <option value="">-- Choose your name --</option>
+            <option value="">Loading guest list...</option>
           </select>
         </div>
 
@@ -304,7 +304,7 @@
           <input type="tel" id="guestPhone" placeholder="+353... or +55..." required>
         </div>
 
-        <!-- Brazilian Passport Help Section (Only in Portuguese mode / BR guests) -->
+        <!-- Brazilian Passport Help Section -->
         <div class="box-section" id="passportSection" style="display: none;">
           <h3>🛂 Ajuda com Passaporte Brasileiro</h3>
           <p style="font-size: 0.8rem; color: var(--text-muted);">
@@ -349,37 +349,7 @@
   <script>
     const SHEETS_WEBHOOK_URL = "https://script.google.com/macros/s/AKfycbyk7cq3dXzePP0VRq6HRaQgjGdY0radu4vtNDPhp1LpRWAik87pbK7LF0HlRLjWE6kuLA/exec";
 
-    // Master Guest List with linked pairs/families
-    const GUEST_DATABASE = [
-      { name: "Robert Daly" }, { name: "Larissa Daly" }, { name: "Michael Daly" }, 
-      { name: "Mary Daly", linked: ["Christopher Daly"] },
-      { name: "Linda Cahill", linked: ["Conor Cahill", "Cathy Cahill", "Ayla Cahill", "Avean Cahill", "Caera Cahill"] },
-      { name: "Will Daly", linked: ["Ezgi Atakul"] },
-      { name: "Brendan Daly", linked: ["Deirdre Daly"] },
-      { name: "Chris Daly", linked: ["Guest (Chris Daly)"] },
-      { name: "Cian Mc Donnell", linked: ["Guest (Cian)"] },
-      { name: "Corey Brennan", linked: ["Guest (Corey)"] },
-      { name: "George O Mahony", linked: ["Charlotte Barton"] },
-      { name: "James Roche", linked: ["Guest (James Roche)"] },
-      { name: "Luke Mccarthty", linked: ["Guest (Luke)"] },
-      { name: "Sean Murphy", linked: ["Joanne Murphy"] },
-      { name: "Patrick Fitzgibbon", linked: ["Stephanie Fitzgibbon"] },
-      { name: "Shane Burke", linked: ["Guest (Shane Burke)"] },
-      { name: "Shane Galvin", linked: ["Rebecca Perrott"] },
-      { name: "Mikey O Donovan", linked: ["Guest (Mikey)"] },
-      { name: "Peter Olden", linked: ["Guest (Peter)"] },
-      { name: "Pauline Olden" },
-      { name: "Mike O'Riordan", linked: ["Guest (Mike O'Riordan)"] },
-      { name: "Donica O'Leary" },
-      { name: "Kevin Brennan", linked: ["Niamh Brennan"] },
-      { name: "Dylan Leahy", linked: ["Guest (Dylan)"] },
-      { name: "Shane Fitzgerald", linked: ["Guest (Shane)"] },
-      { name: "Laura Teixeira", isPT: true },
-      { name: "Anna Laura Teixeira", isPT: true },
-      { name: "Fabiano Lima", linked: ["Jhenifer Bering", "Alexia Lima"], isPT: true },
-      { name: "Jadeilson Lima", isPT: true }
-    ];
-
+    let guestList = [];
     let currentLang = 'en';
 
     const translations = {
@@ -431,16 +401,24 @@
       }
     };
 
-    function initDropdown() {
+    async function loadLiveGuestList() {
       const dd = document.getElementById('guestDropdown');
-      GUEST_DATABASE.sort((a,b) => a.name.localeCompare(b.name)).forEach(g => {
-        const opt = document.createElement('option');
-        opt.value = g.name;
-        opt.innerText = g.name;
-        dd.appendChild(opt);
-      });
+      try {
+        const response = await fetch(SHEETS_WEBHOOK_URL);
+        guestList = await response.json();
+        
+        dd.innerHTML = '<option value="">-- Choose your name --</option>';
+        guestList.sort((a,b) => a.name.localeCompare(b.name)).forEach(g => {
+          const opt = document.createElement('option');
+          opt.value = g.name;
+          opt.innerText = g.name;
+          dd.appendChild(opt);
+        });
+      } catch (e) {
+        dd.innerHTML = '<option value="">-- Choose your name --</option>';
+      }
     }
-    initDropdown();
+    loadLiveGuestList();
 
     function setLanguage(lang) {
       currentLang = lang;
@@ -457,17 +435,8 @@
     }
 
     function onGuestSelected(name) {
-      const container = document.getElementById('companionContainer');
-      container.innerHTML = '';
-      const guest = GUEST_DATABASE.find(g => g.name === name);
-
+      const guest = guestList.find(g => g.name === name);
       if (guest && guest.isPT) setLanguage('pt');
-
-      if (guest && guest.linked) {
-        guest.linked.forEach(compName => {
-          addPlusOneField(compName);
-        });
-      }
     }
 
     function addPlusOneField(defaultName = "") {
@@ -498,7 +467,6 @@
       const needsElevator = document.getElementById('chkElevator').checked;
       const needsPassport = document.getElementById('chkNeedPassport') ? document.getElementById('chkNeedPassport').checked : false;
 
-      // Submit Primary Guest
       const payload = {
         type: "rsvp",
         data: {
@@ -525,7 +493,6 @@
           body: JSON.stringify(payload)
         });
 
-        // Submit Companions
         const compInputs = document.querySelectorAll('.companion-input');
         for (let input of compInputs) {
           if (input.value.trim()) {
@@ -546,7 +513,6 @@
           }
         }
 
-        // Submit Passport details if requested
         if (needsPassport) {
           await fetch(SHEETS_WEBHOOK_URL, {
             method: 'POST',
