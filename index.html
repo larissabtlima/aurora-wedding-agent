@@ -131,7 +131,7 @@
       color: var(--primary);
     }
 
-    input[type="text"], input[type="tel"], select {
+    input[type="text"], input[type="tel"], select, textarea {
       width: 100%;
       padding: 12px 14px;
       border: 1px solid var(--border);
@@ -289,7 +289,6 @@
 <body>
 
   <div class="container">
-    <!-- Top Centered Language Selector -->
     <div class="lang-wrapper">
       <div class="lang-toggle">
         <button type="button" class="lang-btn active" id="btnEN" onclick="setLanguage('en')">🌐 English</button>
@@ -373,7 +372,6 @@
         <div class="form-group" id="mainEventsGroup">
           <label id="lblEvents">Events Attending</label>
           
-          <!-- Schedule Overview Card -->
           <div class="event-desc-box">
             <div class="event-desc-item" id="descDay1">
               🍷 <b>Day 1 (24/06):</b> Winery afternoon near Rome — pasta-making class & wine tasting outdoors!
@@ -454,11 +452,11 @@
           <input type="tel" id="guestPhone" placeholder="+353... or +55..." required>
         </div>
 
-        <!-- Brazilian Passport Section -->
+        <!-- Complete Brazilian Passport Section -->
         <div class="box-section" id="passportSection" style="display: none;">
-          <h3>Passaporte Brasileiro</h3>
-          <p style="font-size: 0.8rem; color: var(--text-muted);">
-            A Larissa está ajudando os convidados a agendar o passaporte na Polícia Federal. Se você precisa tirar ou renovar o seu, preencha os dados abaixo.
+          <h3>🛂 Agendamento de Passaporte Brasileiro</h3>
+          <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 10px;">
+            A Larissa fará todo o preenchimento no site da Polícia Federal e o agendamento para você! Preencha os dados abaixo e faça a transferência da taxa.
           </p>
           
           <div class="pix-box">
@@ -469,15 +467,43 @@
 
           <label class="checkbox-card" style="margin-bottom: 12px;">
             <input type="checkbox" id="chkNeedPassport" onchange="togglePassportFields(this.checked)">
-            <span>Quero que a Larissa faça meu agendamento na PF</span>
+            <span>Quero que a Larissa faça meu agendamento na Polícia Federal</span>
           </label>
 
-          <div id="passportFields" style="display: none; grid-gap: 10px;">
+          <div id="passportFields" style="display: none; grid-gap: 12px;">
             <input type="text" id="pfCPF" placeholder="CPF">
             <input type="text" id="pfDOB" placeholder="Data de Nascimento (DD/MM/AAAA)">
+            <input type="text" id="pfBirthPlace" placeholder="Cidade e UF de Nascimento (ex: Belo Horizonte / MG)">
+            
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+              <input type="text" id="pfRG" placeholder="Número do RG">
+              <input type="text" id="pfRGIssuer" placeholder="Órgão Emissor / UF (ex: SSP/MG)">
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+              <select id="pfGender">
+                <option value="">Sexo</option>
+                <option value="Feminino">Feminino</option>
+                <option value="Masculino">Masculino</option>
+              </select>
+              <select id="pfMaritalStatus">
+                <option value="">Estado Civil</option>
+                <option value="Solteiro(a)">Solteiro(a)</option>
+                <option value="Casado(a)">Casado(a)</option>
+                <option value="Divorciado(a)">Divorciado(a)</option>
+                <option value="Viuvo(a)">Viúvo(a)</option>
+              </select>
+            </div>
+
             <input type="text" id="pfMother" placeholder="Nome Completo da Mãe">
+            <input type="text" id="pfJob" placeholder="Profissão Actual">
             <input type="text" id="pfAddress" placeholder="Endereço Completo com CEP">
-            <input type="text" id="pfCity" placeholder="Cidade de preferência para o agendamento">
+            <input type="text" id="pfCity" placeholder="Cidade de preferência para o agendamento no posto da PF">
+            
+            <div style="background: #FFF; padding: 10px; border-radius: 6px; border: 1px solid var(--border);">
+              <label style="font-size: 0.75rem; color: var(--primary); margin-bottom: 4px;">Preferência de Horário / Dias (Postos PF funcionam Seg-Sex, 8h às 17h):</label>
+              <input type="text" id="pfAvailability" placeholder="Ex: Preferência quartas ou sextas de manhã">
+            </div>
           </div>
         </div>
 
@@ -781,12 +807,14 @@
         if (sameDiet) {
           diet = Array.from(document.querySelectorAll('#mainDietGroup input[name="dietary"]:checked')).map(cb => cb.value);
         } else {
-          diet = Array.from(document.querySelectorAll(`.indiv-diet-${personName}:checked`)).map(cb => cb.value);
+          // Read from custom individual dietary checkboxes per person
+          const personDietElements = document.querySelectorAll(`.indiv-diet-${personName}:checked`);
+          diet = Array.from(personDietElements).map(cb => cb.value);
         }
 
         const isPrimary = personName === primaryName;
         const plusOneChoice = document.getElementById('plusOneChoice').value;
-        let placeholderTarget = (plusOneChoice !== 'none' && !isPrimary && personName.startsWith("Guest (")) ? ("Guest (" + primaryName.split(" ")[0] + ")") : null;
+        let placeholderTarget = (plusOneChoice !== 'none' && !isPrimary && (personName.indexOf("Guest (") === 0 || personName === "Guest")) ? ("Guest (" + primaryName.split(" ")[0] + ")") : null;
 
         const payload = {
           type: "rsvp",
@@ -798,12 +826,12 @@
             days: days,
             needs_elevator: needsElevator,
             needs_passport: isPrimary ? needsPassport : false,
-            dietary_vegetarian: diet.includes('vegetarian'),
-            dietary_vegan: diet.includes('vegan'),
-            dietary_nut_allergy: diet.includes('nut_allergy'),
-            dietary_no_beef: diet.includes('no_beef'),
-            dietary_no_pork: diet.includes('no_pork'),
-            dietary_shellfish: diet.includes('shellfish')
+            dietary_vegetarian: diet.indexOf('vegetarian') !== -1,
+            dietary_vegan: diet.indexOf('vegan') !== -1,
+            dietary_nut_allergy: diet.indexOf('nut_allergy') !== -1,
+            dietary_no_beef: diet.indexOf('no_beef') !== -1,
+            dietary_no_pork: diet.indexOf('no_pork') !== -1,
+            dietary_shellfish: diet.indexOf('shellfish') !== -1
           }
         };
 
@@ -831,9 +859,16 @@
                 name: primaryName,
                 cpf: document.getElementById('pfCPF').value,
                 dob: document.getElementById('pfDOB').value,
+                birth_place: document.getElementById('pfBirthPlace').value,
+                rg: document.getElementById('pfRG').value,
+                rg_issuer: document.getElementById('pfRGIssuer').value,
+                gender: document.getElementById('pfGender').value,
+                marital_status: document.getElementById('pfMaritalStatus').value,
                 mother: document.getElementById('pfMother').value,
+                job: document.getElementById('pfJob').value,
                 address: document.getElementById('pfAddress').value,
-                pf_city: document.getElementById('pfCity').value
+                pf_city: document.getElementById('pfCity').value,
+                availability: document.getElementById('pfAvailability').value
               }
             })
           });
