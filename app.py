@@ -224,7 +224,7 @@ load_state()
 # GUEST DIRECTORY
 # Loaded from the secured Apps Script "directory" endpoint.
 # Used ONLY to tell a guest about their OWN status (on the list?
-# bridal party? accommodation covered?) — never exposed in bulk.
+# bridal party? accommodation paid/organized?) — never exposed in bulk.
 # ============================================================
 GUEST_DIRECTORY = {}
 _directory_last_load = 0
@@ -270,11 +270,14 @@ def build_guest_context_note(phone_number, user_message):
     record = GUEST_DIRECTORY.get(name.split(" (")[0].strip().lower())
     if not record:
         return ""
-    accommodation_note = (
-        "A acomodação (hotel) dela(e) está sendo organizada/coberta pela Larissa e pelo Robert."
-        if record.get("accommodation")
-        else "A acomodação (hotel) dela(e) é por conta própria, a menos que a Larissa e o Robert já tenham dito o contrário diretamente para essa pessoa."
-    )
+
+    if record.get("accommodation_paid"):
+        accommodation_note = "A Larissa e o Robert estão cobrindo o custo da acomodação (hotel) dela(e)."
+    elif record.get("accommodation_organized"):
+        accommodation_note = "A Larissa e o Robert estão ajudando a organizar/reservar a acomodação dela(e), mas o custo é por conta própria da pessoa."
+    else:
+        accommodation_note = "A acomodação (hotel) dela(e) é por conta própria, a menos que a Larissa e o Robert já tenham dito o contrário diretamente para essa pessoa."
+
     special_note = (
         "Essa pessoa faz parte do cortejo / família próxima dos noivos (bridal party)."
         if record.get("bridal_party")
