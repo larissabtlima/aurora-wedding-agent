@@ -19,9 +19,7 @@
       --border: #E8E2D9;
       --pix-bg: #E8F5E9;
     }
-
     * { box-sizing: border-box; margin: 0; padding: 0; }
-
     body {
       font-family: 'Montserrat', sans-serif;
       background-color: var(--bg-color);
@@ -33,7 +31,6 @@
       align-items: center;
       min-height: 100vh;
     }
-
     .container {
       width: 100%;
       max-width: 680px;
@@ -44,7 +41,6 @@
       box-shadow: 0 10px 30px rgba(0, 0, 0, 0.04);
       position: relative;
     }
-
     .lang-wrapper {
       display: flex;
       justify-content: center;
@@ -52,7 +48,6 @@
       gap: 10px;
       margin-bottom: 20px;
     }
-
     .lang-toggle {
       display: inline-flex;
       background: #F2EFEA;
@@ -61,7 +56,6 @@
       border: 1px solid var(--accent);
       box-shadow: 0 2px 8px rgba(0,0,0,0.05);
     }
-
     .lang-btn {
       background: transparent;
       border: none;
@@ -74,13 +68,11 @@
       color: var(--primary);
       transition: all 0.2s ease;
     }
-
     .lang-btn.active {
       background: var(--primary);
       color: #FFF;
       box-shadow: 0 2px 6px rgba(0,0,0,0.15);
     }
-
     .deadline-banner {
       background: var(--primary);
       color: #FFF;
@@ -94,12 +86,10 @@
       margin-bottom: 25px;
       border: 1px solid var(--accent);
     }
-
     .header {
       text-align: center;
       margin-bottom: 25px;
     }
-
     .header h1 {
       font-family: 'Cinzel', serif;
       font-size: 1.8rem;
@@ -108,7 +98,6 @@
       text-transform: uppercase;
       margin-bottom: 6px;
     }
-
     .header p {
       font-size: 0.8rem;
       letter-spacing: 2px;
@@ -116,11 +105,9 @@
       color: var(--accent);
       font-weight: 600;
     }
-
     .form-group {
       margin-bottom: 22px;
     }
-
     label {
       display: block;
       font-size: 0.85rem;
@@ -130,7 +117,6 @@
       margin-bottom: 8px;
       color: var(--primary);
     }
-
     input[type="text"], input[type="tel"], select, textarea {
       width: 100%;
       padding: 12px 14px;
@@ -141,13 +127,11 @@
       background: #FAF9F7;
       color: var(--text);
     }
-
     .radio-group, .checkbox-group {
       display: grid;
       grid-template-columns: 1fr 1fr;
       gap: 10px;
     }
-
     .radio-card, .checkbox-card {
       border: 1px solid var(--border);
       padding: 12px;
@@ -159,13 +143,11 @@
       font-size: 0.85rem;
       background: #FAF9F7;
     }
-
     .checkbox-card input, .radio-card input {
       accent-color: var(--primary);
       width: 16px;
       height: 16px;
     }
-
     .box-section {
       background: #FAF6F0;
       padding: 18px;
@@ -173,14 +155,12 @@
       border-left: 4px solid var(--accent);
       margin-bottom: 22px;
     }
-
     .box-section h3 {
       font-family: 'Cinzel', serif;
       font-size: 0.95rem;
       color: var(--primary);
       margin-bottom: 8px;
     }
-
     .event-desc-box {
       background: #FAF9F7;
       border: 1px solid var(--border);
@@ -190,15 +170,12 @@
       font-size: 0.83rem;
       line-height: 1.5;
     }
-
     .event-desc-item {
       margin-bottom: 10px;
     }
-
     .event-desc-item:last-child {
       margin-bottom: 0;
     }
-
     .person-card {
       background: #FFFFFF;
       border: 1px solid var(--border);
@@ -206,14 +183,12 @@
       border-radius: 8px;
       margin-top: 12px;
     }
-
     .person-card h4 {
       font-family: 'Cinzel', serif;
       color: var(--primary);
       margin-bottom: 10px;
       font-size: 0.9rem;
     }
-
     .pix-box {
       background: var(--pix-bg);
       border: 1px dashed #2E7D32;
@@ -222,7 +197,6 @@
       font-size: 0.85rem;
       margin: 10px 0;
     }
-
     .wa-banner-box {
       background: #E8F5E9;
       border: 1px solid #C8E6C9;
@@ -231,14 +205,12 @@
       text-align: center;
       margin-bottom: 22px;
     }
-
     .wa-banner-box p {
       font-size: 0.82rem;
       color: #2E7D32;
       margin-top: 10px;
       line-height: 1.4;
     }
-
     .btn-submit {
       width: 100%;
       background: var(--primary);
@@ -252,13 +224,11 @@
       border-radius: 6px;
       cursor: pointer;
     }
-
     .success-card {
       text-align: center;
       display: none;
       padding: 20px 0;
     }
-
     .wa-btn {
       display: inline-flex;
       align-items: center;
@@ -274,20 +244,54 @@
       box-shadow: 0 4px 12px rgba(37, 211, 102, 0.25);
       transition: transform 0.2s ease;
     }
-
     .wa-btn:hover {
       transform: translateY(-1px);
     }
-
     .wa-icon-svg {
       width: 22px;
       height: 22px;
       fill: currentColor;
     }
+    .name-search-wrapper {
+      position: relative;
+    }
+    #guestSuggestions {
+      display: none;
+      position: absolute;
+      top: calc(100% + 4px);
+      left: 0;
+      right: 0;
+      background: #FFFFFF;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      box-shadow: 0 8px 20px rgba(0,0,0,0.08);
+      max-height: 240px;
+      overflow-y: auto;
+      z-index: 20;
+    }
+    .guest-suggestion-item {
+      padding: 10px 14px;
+      font-size: 0.9rem;
+      cursor: pointer;
+    }
+    .guest-suggestion-item:hover,
+    .guest-suggestion-item.active {
+      background: #FAF6F0;
+    }
+    .guest-suggestion-empty {
+      padding: 10px 14px;
+      font-size: 0.85rem;
+      color: var(--text-muted);
+    }
+    #guestNameError {
+      display: none;
+      color: #B3261E;
+      font-size: 0.78rem;
+      margin-top: 6px;
+    }
   </style>
 </head>
 <body>
-
   <div class="container">
     <div class="lang-wrapper">
       <div class="lang-toggle">
@@ -295,32 +299,30 @@
         <button type="button" class="lang-btn" id="btnPT" onclick="setLanguage('pt')">🌐 Português</button>
       </div>
     </div>
-
     <div id="rsvpFormContainer">
       <div class="deadline-banner" id="bannerDeadline">
         🗓 RSVP Deadline: January 29, 2027
       </div>
-
       <div class="header">
         <h1>Larissa & Robert</h1>
         <p id="subHeader">Rome • June 24–26, 2027</p>
       </div>
-
       <form id="rsvpForm" onsubmit="handleFormSubmit(event)">
-        <!-- Name Dropdown -->
+        <!-- Name Search (type-ahead, doesn't reveal the full guest list) -->
         <div class="form-group">
           <label id="lblFullTitle">Select Your Name</label>
-          <select id="guestDropdown" required onchange="onGuestSelected(this.value)">
-            <option value="">Loading guest list...</option>
-          </select>
+          <div class="name-search-wrapper">
+            <input type="text" id="guestSearchInput" autocomplete="off" placeholder="Start typing your name…" oninput="handleGuestSearchInput(this.value)" onfocus="handleGuestSearchInput(this.value)">
+            <input type="hidden" id="guestDropdown">
+            <div id="guestSuggestions"></div>
+          </div>
+          <div id="guestNameError">Please select your name from the list.</div>
         </div>
-
         <!-- Linked Family Members -->
         <div id="familySection" class="box-section" style="display: none;">
           <h3 id="lblFamilyTitle">Family Members Included</h3>
           <div id="familyCheckboxes"></div>
         </div>
-
         <!-- Plus One Options -->
         <div id="plusOneSection" class="box-section" style="display: none;">
           <h3 id="lblPlusOneTitle">Plus-One Invitation</h3>
@@ -332,12 +334,10 @@
             <option value="add_now">Add Plus-One Name Now</option>
             <option value="confirm_later">Confirm Plus-One Spot (Name Later)</option>
           </select>
-
           <div id="plusOneNameBox" style="display: none; margin-top: 10px;">
             <input type="text" id="plusOneFullName" placeholder="Plus-One Full Name">
           </div>
         </div>
-
         <!-- Attendance -->
         <div class="form-group">
           <label id="lblAttending">Will you attend?</label>
@@ -352,7 +352,6 @@
             </label>
           </div>
         </div>
-
         <!-- Question 1: Events Attendance Breakdown -->
         <div id="qEventsSection" class="form-group" style="display: none;">
           <label id="lblQEvents">Party Schedule Attendance</label>
@@ -367,7 +366,6 @@
             </label>
           </div>
         </div>
-
         <!-- Single/Shared Events Group -->
         <div class="form-group" id="mainEventsGroup">
           <label id="lblEvents">Events Attending</label>
@@ -383,7 +381,6 @@
               🍺 <b>Day 3 (26/06):</b> Relaxed post-wedding gathering at Scholars Lounge Irish Pub!
             </div>
           </div>
-
           <div class="checkbox-group" style="grid-template-columns: 1fr;">
             <label class="checkbox-card">
               <input type="checkbox" name="days" value="day1" checked>
@@ -399,10 +396,8 @@
             </label>
           </div>
         </div>
-
         <!-- Individual Events Breakdown Container -->
         <div id="indivEventsContainer" style="display: none;"></div>
-
         <!-- Church Elevator Question -->
         <div class="box-section">
           <h3 id="lblElevatorTitle">Church Ceremony Accessibility (Santa Maria in Aracoeli)</h3>
@@ -414,7 +409,6 @@
             <span id="txtElevatorOpt">I / someone in my party requires elevator access for the church</span>
           </label>
         </div>
-
         <!-- Question 2: Dietary Preferences Breakdown -->
         <div id="qDietSection" class="form-group" style="display: none;">
           <label id="lblQDiet">Dietary Preferences</label>
@@ -429,7 +423,6 @@
             </label>
           </div>
         </div>
-
         <!-- Single/Shared Dietary Group -->
         <div class="form-group" id="mainDietGroup">
           <label id="lblDietary">Dietary Restrictions</label>
@@ -442,16 +435,13 @@
             <label class="checkbox-card"><input type="checkbox" name="dietary" value="shellfish"><span id="dietShell">Shellfish Allergy</span></label>
           </div>
         </div>
-
         <!-- Individual Dietary Breakdown Container -->
         <div id="indivDietContainer" style="display: none;"></div>
-
         <!-- Phone Number -->
         <div class="form-group">
           <label id="lblPhone">WhatsApp Phone Number</label>
           <input type="tel" id="guestPhone" placeholder="+353... or +55..." required>
         </div>
-
         <!-- Complete Brazilian Passport Section -->
         <div class="box-section" id="passportSection" style="display: none;">
           <h3>🛂 Agendamento de Passaporte Brasileiro</h3>
@@ -464,12 +454,10 @@
             Chave PIX (Larissa): <code>13005770613</code><br>
             <i>Envie o comprovante para a Larissa após realizar o PIX.</i>
           </div>
-
           <label class="checkbox-card" style="margin-bottom: 12px;">
             <input type="checkbox" id="chkNeedPassport" onchange="togglePassportFields(this.checked)">
             <span>Quero que a Larissa faça meu agendamento na Polícia Federal</span>
           </label>
-
           <div id="passportFields" style="display: none; grid-gap: 12px;">
             <input type="text" id="pfCPF" placeholder="CPF">
             <input type="text" id="pfDOB" placeholder="Data de Nascimento (DD/MM/AAAA)">
@@ -479,7 +467,6 @@
               <input type="text" id="pfRG" placeholder="Número do RG">
               <input type="text" id="pfRGIssuer" placeholder="Órgão Emissor / UF (ex: SSP/MG)">
             </div>
-
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
               <select id="pfGender">
                 <option value="">Sexo</option>
@@ -494,7 +481,6 @@
                 <option value="Viuvo(a)">Viúvo(a)</option>
               </select>
             </div>
-
             <input type="text" id="pfMother" placeholder="Nome Completo da Mãe">
             <input type="text" id="pfJob" placeholder="Profissão Actual">
             <input type="text" id="pfAddress" placeholder="Endereço Completo com CEP">
@@ -506,7 +492,6 @@
             </div>
           </div>
         </div>
-
         <!-- WhatsApp Support Banner Before Submit -->
         <div class="wa-banner-box">
           <a href="https://wa.me/353833986529?text=Hi%20Aurora!%20I%20have%20a%20question%20about%20the%20wedding%20trip%20to%20Rome." target="_blank" class="wa-btn">
@@ -517,11 +502,9 @@
             💡 <b>Need help planning your trip?</b> Aurora (our AI Concierge) can assist with flight tips, hotels, and schedule details. We highly recommend having WhatsApp downloaded, as all wedding updates and reminders will be sent via WhatsApp!
           </p>
         </div>
-
         <button type="submit" class="btn-submit" id="btnSubmit">Submit RSVP</button>
       </form>
     </div>
-
     <!-- Success Screen -->
     <div class="success-card" id="successScreen">
       <h2 id="txtSuccessTitle">Thank You!</h2>
@@ -533,13 +516,11 @@
       </a>
     </div>
   </div>
-
   <script>
     const SHEETS_WEBHOOK_URL = "https://script.google.com/macros/s/AKfycbyk7cq3dXzePP0VRq6HRaQgjGdY0radu4vtNDPhp1LpRWAik87pbK7LF0HlRLjWE6kuLA/exec";
-
     let guestList = [];
     let currentLang = 'en';
-
+    let visibleSuggestions = [];
     const translations = {
       en: {
         bannerDeadline: "🗓 RSVP Deadline: January 29, 2027",
@@ -577,7 +558,10 @@
         btnSubmit: "Submit RSVP",
         txtSuccessTitle: "RSVP Confirmed!",
         txtSuccessDesc: "We can't wait to celebrate with you in Rome! Need assistance with flights or hotel recommendations?",
-        waText: "💬 Chat with Aurora on WhatsApp"
+        waText: "💬 Chat with Aurora on WhatsApp",
+        guestSearchPlaceholder: "Start typing your name…",
+        guestNameError: "Please select your name from the list.",
+        guestNoMatch: "No matching name found. Try a different spelling, or contact Larissa & Robert directly."
       },
       pt: {
         bannerDeadline: "🗓 Prazo de Confirmação: 29 de Janeiro de 2027",
@@ -615,51 +599,98 @@
         btnSubmit: "Confirmar Presença",
         txtSuccessTitle: "Presença Confirmada!",
         txtSuccessDesc: "Estamos muito felizes em comemorar com você em Roma! Precisa de ajuda com voos ou hospedagem?",
-        waText: "💬 Falar com a Aurora no WhatsApp"
+        waText: "💬 Falar com a Aurora no WhatsApp",
+        guestSearchPlaceholder: "Comece a digitar seu nome…",
+        guestNameError: "Por favor selecione seu nome na lista.",
+        guestNoMatch: "Nenhum nome encontrado. Tente outra grafia, ou fale diretamente com a Larissa e o Robert."
       }
     };
-
     async function loadLiveGuestList() {
-      const dd = document.getElementById('guestDropdown');
       try {
         const response = await fetch(SHEETS_WEBHOOK_URL);
         guestList = await response.json();
-        
-        dd.innerHTML = '<option value="">-- Choose your name --</option>';
-        guestList.filter(g => !g.isPlaceholder).sort((a,b) => a.name.localeCompare(b.name)).forEach(g => {
-          const opt = document.createElement('option');
-          opt.value = g.name;
-          opt.innerText = g.name;
-          dd.appendChild(opt);
-        });
       } catch (e) {
-        dd.innerHTML = '<option value="">-- Choose your name --</option>';
+        guestList = [];
       }
     }
     loadLiveGuestList();
+
+    function handleGuestSearchInput(rawValue) {
+      const box = document.getElementById('guestSuggestions');
+      const hidden = document.getElementById('guestDropdown');
+      const errorEl = document.getElementById('guestNameError');
+      errorEl.style.display = 'none';
+
+      // If the text no longer matches the previously selected guest, clear the actual selection
+      if (hidden.value && hidden.value !== rawValue) {
+        hidden.value = '';
+        onGuestSelected('');
+      }
+
+      const query = rawValue.trim().toLowerCase();
+      if (query.length < 2) {
+        box.style.display = 'none';
+        box.innerHTML = '';
+        visibleSuggestions = [];
+        return;
+      }
+
+      const matches = guestList
+        .filter(g => !g.isPlaceholder && g.name.toLowerCase().includes(query))
+        .sort((a, b) => a.name.localeCompare(b.name))
+        .slice(0, 8);
+
+      visibleSuggestions = matches;
+      const t = translations[currentLang];
+
+      if (matches.length === 0) {
+        box.innerHTML = `<div class="guest-suggestion-empty">${t.guestNoMatch}</div>`;
+        box.style.display = 'block';
+        return;
+      }
+
+      box.innerHTML = matches.map(g =>
+        `<div class="guest-suggestion-item" onclick="selectGuestFromSuggestion('${g.name.replace(/'/g, "\\'")}')">${g.name}</div>`
+      ).join('');
+      box.style.display = 'block';
+    }
+
+    function selectGuestFromSuggestion(name) {
+      const guest = guestList.find(g => g.name === name);
+      document.getElementById('guestSearchInput').value = name;
+      document.getElementById('guestDropdown').value = name;
+      document.getElementById('guestSuggestions').style.display = 'none';
+      document.getElementById('guestSuggestions').innerHTML = '';
+      document.getElementById('guestNameError').style.display = 'none';
+      onGuestSelected(name);
+    }
+
+    document.addEventListener('click', function(e) {
+      const wrapper = document.querySelector('.name-search-wrapper');
+      if (wrapper && !wrapper.contains(e.target)) {
+        document.getElementById('guestSuggestions').style.display = 'none';
+      }
+    });
 
     function setLanguage(lang) {
       currentLang = lang;
       
       document.getElementById('btnEN').classList.toggle('active', lang === 'en');
       document.getElementById('btnPT').classList.toggle('active', lang === 'pt');
-
       const t = translations[lang];
       for (let key in t) {
         const el = document.getElementById(key);
         if (el) el.innerHTML = t[key];
       }
-
+      document.getElementById('guestSearchInput').placeholder = t.guestSearchPlaceholder;
+      document.getElementById('guestNameError').innerText = t.guestNameError;
       document.getElementById('passportSection').style.display = lang === 'pt' ? 'block' : 'none';
     }
-
     function getSelectedPartyMembers() {
       const primaryName = document.getElementById('guestDropdown').value;
       let party = [primaryName];
-
       const famBoxes = document.querySelectorAll('.fam-checkbox:checked');
       famBoxes.forEach(cb => party.push(cb.value));
-
       const plusOneChoice = document.getElementById('plusOneChoice').value;
       if (plusOneChoice === 'add_now') {
         const nameInput = document.getElementById('plusOneFullName').value.trim();
@@ -667,22 +698,17 @@
       } else if (plusOneChoice === 'confirm_later') {
         party.push("Guest (" + primaryName.split(" ")[0] + ")");
       }
-
       return party;
     }
-
     function onGuestSelected(name) {
       const guest = guestList.find(g => g.name === name);
       const familySec = document.getElementById('familySection');
       const familyBox = document.getElementById('familyCheckboxes');
       const plusOneSec = document.getElementById('plusOneSection');
-
       familyBox.innerHTML = '';
       familySec.style.display = 'none';
       plusOneSec.style.display = 'none';
-
       if (guest && guest.isPT) setLanguage('pt');
-
       if (guest && guest.linked && guest.linked.length > 0) {
         familySec.style.display = 'block';
         guest.linked.forEach(famName => {
@@ -696,47 +722,37 @@
           familyBox.appendChild(div);
         });
       }
-
       if (guest && guest.hasPlusOneSlot) {
         plusOneSec.style.display = 'block';
       }
-
       updateBreakdownSections();
     }
-
     function updateBreakdownSections() {
       const party = getSelectedPartyMembers();
       const isMultiple = party.length > 1;
-
       document.getElementById('qEventsSection').style.display = isMultiple ? 'block' : 'none';
       document.getElementById('qDietSection').style.display = isMultiple ? 'block' : 'none';
-
       if (isMultiple) {
         buildIndividualEventsFields(party);
         buildIndividualDietFields(party);
       }
     }
-
     function handlePlusOneChoice(val) {
       const nameBox = document.getElementById('plusOneNameBox');
       nameBox.style.display = val === 'add_now' ? 'block' : 'none';
       updateBreakdownSections();
     }
-
     function toggleEventsBreakdown(showIndividual) {
       document.getElementById('mainEventsGroup').style.display = showIndividual ? 'none' : 'block';
       document.getElementById('indivEventsContainer').style.display = showIndividual ? 'block' : 'none';
     }
-
     function toggleDietBreakdown(showIndividual) {
       document.getElementById('mainDietGroup').style.display = showIndividual ? 'none' : 'block';
       document.getElementById('indivDietContainer').style.display = showIndividual ? 'block' : 'none';
     }
-
     function buildIndividualEventsFields(party) {
       const container = document.getElementById('indivEventsContainer');
       container.innerHTML = '';
-
       party.forEach(personName => {
         const div = document.createElement('div');
         div.className = 'person-card';
@@ -751,11 +767,9 @@
         container.appendChild(div);
       });
     }
-
     function buildIndividualDietFields(party) {
       const container = document.getElementById('indivDietContainer');
       container.innerHTML = '';
-
       party.forEach(personName => {
         const div = document.createElement('div');
         div.className = 'person-card';
@@ -773,49 +787,47 @@
         container.appendChild(div);
       });
     }
-
     function togglePassportFields(show) {
       document.getElementById('passportFields').style.display = show ? 'grid' : 'none';
     }
-
     async function handleFormSubmit(e) {
       e.preventDefault();
+
+      const primaryName = document.getElementById('guestDropdown').value;
+      if (!primaryName) {
+        const errorEl = document.getElementById('guestNameError');
+        errorEl.style.display = 'block';
+        document.getElementById('guestSearchInput').focus();
+        document.getElementById('guestSearchInput').scrollIntoView({ behavior: 'smooth', block: 'center' });
+        return;
+      }
+
       const btn = document.getElementById('btnSubmit');
       btn.disabled = true;
       btn.innerText = currentLang === 'en' ? 'Submitting...' : 'Enviando...';
-
-      const primaryName = document.getElementById('guestDropdown').value;
       const attendingVal = document.querySelector('input[name="attending"]:checked').value;
       const needsElevator = document.getElementById('chkElevator').checked;
       const needsPassport = document.getElementById('chkNeedPassport') ? document.getElementById('chkNeedPassport').checked : false;
-
       const sameEvents = document.querySelector('input[name="sameEvents"]:checked') ? document.querySelector('input[name="sameEvents"]:checked').value === 'yes' : true;
       const sameDiet = document.querySelector('input[name="sameDiet"]:checked') ? document.querySelector('input[name="sameDiet"]:checked').value === 'yes' : true;
-
       const partyMembers = getSelectedPartyMembers();
-
       for (let personName of partyMembers) {
         let days = [];
         let diet = [];
-
         if (sameEvents) {
           days = Array.from(document.querySelectorAll('#mainEventsGroup input[name="days"]:checked')).map(cb => cb.value);
         } else {
           days = Array.from(document.querySelectorAll(`.indiv-day-${personName}:checked`)).map(cb => cb.value);
         }
-
         if (sameDiet) {
           diet = Array.from(document.querySelectorAll('#mainDietGroup input[name="dietary"]:checked')).map(cb => cb.value);
         } else {
-          // Read from custom individual dietary checkboxes per person
           const personDietElements = document.querySelectorAll(`.indiv-diet-${personName}:checked`);
           diet = Array.from(personDietElements).map(cb => cb.value);
         }
-
         const isPrimary = personName === primaryName;
         const plusOneChoice = document.getElementById('plusOneChoice').value;
         let placeholderTarget = (plusOneChoice !== 'none' && !isPrimary && (personName.indexOf("Guest (") === 0 || personName === "Guest")) ? ("Guest (" + primaryName.split(" ")[0] + ")") : null;
-
         const payload = {
           type: "rsvp",
           data: {
@@ -834,7 +846,6 @@
             dietary_shellfish: diet.indexOf('shellfish') !== -1
           }
         };
-
         try {
           await fetch(SHEETS_WEBHOOK_URL, {
             method: 'POST',
@@ -846,7 +857,6 @@
           console.log("Error submitting person:", personName, err);
         }
       }
-
       if (needsPassport) {
         try {
           await fetch(SHEETS_WEBHOOK_URL, {
@@ -876,7 +886,6 @@
           console.log("Error submitting passport", err);
         }
       }
-
       document.getElementById('rsvpFormContainer').style.display = 'none';
       document.getElementById('successScreen').style.display = 'block';
     }
