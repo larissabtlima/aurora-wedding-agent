@@ -850,6 +850,11 @@
         // When declining, only the primary guest is submitted, with everything cleared —
         // no family/plus-one members, no days, no dietary flags, no elevator request.
         const partyMembers = attendingVal === 'no' ? [primaryName] : getSelectedPartyMembers();
+        // Build every person's payload first, then fire all their requests at once
+        // (instead of waiting for each one to finish before starting the next).
+        // This is what actually shaves the wait time down for multi-person parties —
+        // each request to Google still takes 1-3s on their end, but they now overlap.
+        const submitPromises = [];
         for (let personName of partyMembers) {
           const id = safeId(personName);
           let days = [];
@@ -890,18 +895,17 @@
               dietary_shellfish: diet.indexOf('shellfish') !== -1
             }
           };
-          try {
-            await fetch(SHEETS_WEBHOOK_URL, {
+          submitPromises.push(
+            fetch(SHEETS_WEBHOOK_URL, {
               method: 'POST',
               mode: 'no-cors',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify(payload)
-            });
-          } catch (err) {
-            console.log("Error submitting person:", personName, err);
-          }
+            }).catch(err => console.log("Error submitting person:", personName, err))
+          );
         }
         if (needsPassport) {
+          submitPromises.push((async () => {
           try {
             await fetch(SHEETS_WEBHOOK_URL, {
               method: 'POST',
@@ -930,7 +934,9 @@
           } catch (err) {
             console.log("Error submitting passport", err);
           }
+          })());
         }
+        await Promise.all(submitPromises);
         document.getElementById('rsvpFormContainer').style.display = 'none';
         document.getElementById('successScreen').style.display = 'block';
       } catch (err) {
