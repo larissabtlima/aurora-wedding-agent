@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Montserrat:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-  
+
   <style>
     :root {
       --bg-color: #FAF8F5;
@@ -369,7 +369,7 @@
         <!-- Single/Shared Events Group -->
         <div class="form-group" id="mainEventsGroup">
           <label id="lblEvents">Events Attending</label>
-          
+
           <div class="event-desc-box">
             <div class="event-desc-item" id="descDay1">
               🍷 <b>Day 1 (24/06):</b> Winery afternoon near Rome — pasta-making class & wine tasting outdoors!
@@ -448,7 +448,7 @@
           <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 10px;">
             A Larissa fará todo o preenchimento no site da Polícia Federal e o agendamento para você! Preencha os dados abaixo e faça a transferência da taxa.
           </p>
-          
+
           <div class="pix-box">
             <b>Taxa da Polícia Federal: R$ 257,25 (Comum)</b><br>
             Chave PIX (Larissa): <code>13005770613</code><br>
@@ -463,7 +463,7 @@
             <input type="text" id="pfCPF" placeholder="CPF">
             <input type="text" id="pfDOB" placeholder="Data de Nascimento (DD/MM/AAAA)">
             <input type="text" id="pfBirthPlace" placeholder="Cidade e UF de Nascimento (ex: Belo Horizonte / MG)">
-            
+
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
               <input type="text" id="pfRG" placeholder="Número do RG">
               <input type="text" id="pfRGIssuer" placeholder="Órgão Emissor / UF (ex: SSP/MG)">
@@ -486,7 +486,7 @@
             <input type="text" id="pfJob" placeholder="Profissão Actual">
             <input type="text" id="pfAddress" placeholder="Endereço Completo com CEP">
             <input type="text" id="pfCity" placeholder="Cidade de preferência para o agendamento no posto da PF">
-            
+
             <div style="background: #FFF; padding: 10px; border-radius: 6px; border: 1px solid var(--border);">
               <label style="font-size: 0.75rem; color: var(--primary); margin-bottom: 4px;">Preferência de Horário / Dias (Postos PF funcionam Seg-Sex, 8h às 17h):</label>
               <input type="text" id="pfAvailability" placeholder="Ex: Preferência quartas ou sextas de manhã">
@@ -517,6 +517,15 @@
     let guestList = [];
     let currentLang = 'en';
     let visibleSuggestions = [];
+
+    // Turns any guest name (which may contain spaces, parentheses, apostrophes, etc.)
+    // into a safe string that can be used as a CSS class / selector. Using raw names
+    // directly as class names previously broke querySelectorAll for linked/plus-one
+    // guests like "Larissa Lima (Robert Daly)" and caused Submit to hang forever.
+    function safeId(name) {
+      return 'p_' + name.replace(/[^a-zA-Z0-9]/g, '_');
+    }
+
     const translations = {
       en: {
         bannerDeadline: "🗓 RSVP Deadline: January 29, 2027",
@@ -667,7 +676,7 @@
 
     function setLanguage(lang) {
       currentLang = lang;
-      
+
       document.getElementById('btnEN').classList.toggle('active', lang === 'en');
       document.getElementById('btnPT').classList.toggle('active', lang === 'pt');
       const t = translations[lang];
@@ -747,14 +756,15 @@
       const container = document.getElementById('indivEventsContainer');
       container.innerHTML = '';
       party.forEach(personName => {
+        const id = safeId(personName);
         const div = document.createElement('div');
         div.className = 'person-card';
         div.innerHTML = `
           <h4>${personName} — Events Attending</h4>
           <div class="checkbox-group" style="grid-template-columns: 1fr;">
-            <label class="checkbox-card"><input type="checkbox" class="indiv-day-${personName}" value="day1" checked> Thu June 24: Winery Day</label>
-            <label class="checkbox-card"><input type="checkbox" class="indiv-day-${personName}" value="day2" checked> Fri June 25: Wedding Ceremony & Reception</label>
-            <label class="checkbox-card"><input type="checkbox" class="indiv-day-${personName}" value="day3" checked> Sat June 26: Recovery Pub Celebration</label>
+            <label class="checkbox-card"><input type="checkbox" class="indiv-day-${id}" value="day1" checked> Thu June 24: Winery Day</label>
+            <label class="checkbox-card"><input type="checkbox" class="indiv-day-${id}" value="day2" checked> Fri June 25: Wedding Ceremony & Reception</label>
+            <label class="checkbox-card"><input type="checkbox" class="indiv-day-${id}" value="day3" checked> Sat June 26: Recovery Pub Celebration</label>
           </div>
         `;
         container.appendChild(div);
@@ -764,17 +774,18 @@
       const container = document.getElementById('indivDietContainer');
       container.innerHTML = '';
       party.forEach(personName => {
+        const id = safeId(personName);
         const div = document.createElement('div');
         div.className = 'person-card';
         div.innerHTML = `
           <h4>${personName} — Dietary Restrictions</h4>
           <div class="checkbox-group">
-            <label class="checkbox-card"><input type="checkbox" class="indiv-diet-${personName}" value="vegetarian"> Vegetarian</label>
-            <label class="checkbox-card"><input type="checkbox" class="indiv-diet-${personName}" value="vegan"> Vegan</label>
-            <label class="checkbox-card"><input type="checkbox" class="indiv-diet-${personName}" value="nut_allergy"> Nut Allergy</label>
-            <label class="checkbox-card"><input type="checkbox" class="indiv-diet-${personName}" value="no_beef"> No Beef</label>
-            <label class="checkbox-card"><input type="checkbox" class="indiv-diet-${personName}" value="no_pork"> No Pork</label>
-            <label class="checkbox-card"><input type="checkbox" class="indiv-diet-${personName}" value="shellfish"> Shellfish Allergy</label>
+            <label class="checkbox-card"><input type="checkbox" class="indiv-diet-${id}" value="vegetarian"> Vegetarian</label>
+            <label class="checkbox-card"><input type="checkbox" class="indiv-diet-${id}" value="vegan"> Vegan</label>
+            <label class="checkbox-card"><input type="checkbox" class="indiv-diet-${id}" value="nut_allergy"> Nut Allergy</label>
+            <label class="checkbox-card"><input type="checkbox" class="indiv-diet-${id}" value="no_beef"> No Beef</label>
+            <label class="checkbox-card"><input type="checkbox" class="indiv-diet-${id}" value="no_pork"> No Pork</label>
+            <label class="checkbox-card"><input type="checkbox" class="indiv-diet-${id}" value="shellfish"> Shellfish Allergy</label>
           </div>
         `;
         container.appendChild(div);
@@ -798,90 +809,101 @@
       const btn = document.getElementById('btnSubmit');
       btn.disabled = true;
       btn.innerText = currentLang === 'en' ? 'Submitting...' : 'Enviando...';
-      const attendingVal = document.querySelector('input[name="attending"]:checked').value;
-      const needsElevator = document.getElementById('chkElevator').checked;
-      const needsPassport = document.getElementById('chkNeedPassport') ? document.getElementById('chkNeedPassport').checked : false;
-      const sameEvents = document.querySelector('input[name="sameEvents"]:checked') ? document.querySelector('input[name="sameEvents"]:checked').value === 'yes' : true;
-      const sameDiet = document.querySelector('input[name="sameDiet"]:checked') ? document.querySelector('input[name="sameDiet"]:checked').value === 'yes' : true;
-      const partyMembers = getSelectedPartyMembers();
-      for (let personName of partyMembers) {
-        let days = [];
-        let diet = [];
-        if (sameEvents) {
-          days = Array.from(document.querySelectorAll('#mainEventsGroup input[name="days"]:checked')).map(cb => cb.value);
-        } else {
-          days = Array.from(document.querySelectorAll(`.indiv-day-${personName}:checked`)).map(cb => cb.value);
-        }
-        if (sameDiet) {
-          diet = Array.from(document.querySelectorAll('#mainDietGroup input[name="dietary"]:checked')).map(cb => cb.value);
-        } else {
-          const personDietElements = document.querySelectorAll(`.indiv-diet-${personName}:checked`);
-          diet = Array.from(personDietElements).map(cb => cb.value);
-        }
-        const isPrimary = personName === primaryName;
-        const plusOneChoice = document.getElementById('plusOneChoice').value;
-        let placeholderTarget = (plusOneChoice !== 'none' && !isPrimary && (personName.indexOf("Guest (") === 0 || personName === "Guest")) ? ("Guest (" + primaryName.split(" ")[0] + ")") : null;
-        const payload = {
-          type: "rsvp",
-          data: {
-            name: personName,
-            placeholder_target: placeholderTarget,
-            phone: isPrimary ? document.getElementById('guestPhone').value : "",
-            attending: attendingVal,
-            days: days,
-            needs_elevator: needsElevator,
-            needs_passport: isPrimary ? needsPassport : false,
-            dietary_vegetarian: diet.indexOf('vegetarian') !== -1,
-            dietary_vegan: diet.indexOf('vegan') !== -1,
-            dietary_nut_allergy: diet.indexOf('nut_allergy') !== -1,
-            dietary_no_beef: diet.indexOf('no_beef') !== -1,
-            dietary_no_pork: diet.indexOf('no_pork') !== -1,
-            dietary_shellfish: diet.indexOf('shellfish') !== -1
+
+      try {
+        const attendingVal = document.querySelector('input[name="attending"]:checked').value;
+        const needsElevator = document.getElementById('chkElevator').checked;
+        const needsPassport = document.getElementById('chkNeedPassport') ? document.getElementById('chkNeedPassport').checked : false;
+        const sameEvents = document.querySelector('input[name="sameEvents"]:checked') ? document.querySelector('input[name="sameEvents"]:checked').value === 'yes' : true;
+        const sameDiet = document.querySelector('input[name="sameDiet"]:checked') ? document.querySelector('input[name="sameDiet"]:checked').value === 'yes' : true;
+        const partyMembers = getSelectedPartyMembers();
+        for (let personName of partyMembers) {
+          const id = safeId(personName);
+          let days = [];
+          let diet = [];
+          if (sameEvents) {
+            days = Array.from(document.querySelectorAll('#mainEventsGroup input[name="days"]:checked')).map(cb => cb.value);
+          } else {
+            days = Array.from(document.querySelectorAll(`.indiv-day-${id}:checked`)).map(cb => cb.value);
           }
-        };
-        try {
-          await fetch(SHEETS_WEBHOOK_URL, {
-            method: 'POST',
-            mode: 'no-cors',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-          });
-        } catch (err) {
-          console.log("Error submitting person:", personName, err);
+          if (sameDiet) {
+            diet = Array.from(document.querySelectorAll('#mainDietGroup input[name="dietary"]:checked')).map(cb => cb.value);
+          } else {
+            const personDietElements = document.querySelectorAll(`.indiv-diet-${id}:checked`);
+            diet = Array.from(personDietElements).map(cb => cb.value);
+          }
+          const isPrimary = personName === primaryName;
+          const plusOneChoice = document.getElementById('plusOneChoice').value;
+          let placeholderTarget = (plusOneChoice !== 'none' && !isPrimary && (personName.indexOf("Guest (") === 0 || personName === "Guest")) ? ("Guest (" + primaryName.split(" ")[0] + ")") : null;
+          const payload = {
+            type: "rsvp",
+            data: {
+              name: personName,
+              placeholder_target: placeholderTarget,
+              phone: isPrimary ? document.getElementById('guestPhone').value : "",
+              attending: attendingVal,
+              days: days,
+              needs_elevator: needsElevator,
+              needs_passport: isPrimary ? needsPassport : false,
+              dietary_vegetarian: diet.indexOf('vegetarian') !== -1,
+              dietary_vegan: diet.indexOf('vegan') !== -1,
+              dietary_nut_allergy: diet.indexOf('nut_allergy') !== -1,
+              dietary_no_beef: diet.indexOf('no_beef') !== -1,
+              dietary_no_pork: diet.indexOf('no_pork') !== -1,
+              dietary_shellfish: diet.indexOf('shellfish') !== -1
+            }
+          };
+          try {
+            await fetch(SHEETS_WEBHOOK_URL, {
+              method: 'POST',
+              mode: 'no-cors',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload)
+            });
+          } catch (err) {
+            console.log("Error submitting person:", personName, err);
+          }
         }
-      }
-      if (needsPassport) {
-        try {
-          await fetch(SHEETS_WEBHOOK_URL, {
-            method: 'POST',
-            mode: 'no-cors',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              type: "passport_submission",
-              data: {
-                name: primaryName,
-                full_name: document.getElementById('pfFullName').value,
-                cpf: document.getElementById('pfCPF').value,
-                dob: document.getElementById('pfDOB').value,
-                birth_place: document.getElementById('pfBirthPlace').value,
-                rg: document.getElementById('pfRG').value,
-                rg_issuer: document.getElementById('pfRGIssuer').value,
-                gender: document.getElementById('pfGender').value,
-                marital_status: document.getElementById('pfMaritalStatus').value,
-                mother: document.getElementById('pfMother').value,
-                job: document.getElementById('pfJob').value,
-                address: document.getElementById('pfAddress').value,
-                pf_city: document.getElementById('pfCity').value,
-                availability: document.getElementById('pfAvailability').value
-              }
-            })
-          });
-        } catch (err) {
-          console.log("Error submitting passport", err);
+        if (needsPassport) {
+          try {
+            await fetch(SHEETS_WEBHOOK_URL, {
+              method: 'POST',
+              mode: 'no-cors',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                type: "passport_submission",
+                data: {
+                  name: primaryName,
+                  full_name: document.getElementById('pfFullName').value,
+                  cpf: document.getElementById('pfCPF').value,
+                  dob: document.getElementById('pfDOB').value,
+                  birth_place: document.getElementById('pfBirthPlace').value,
+                  rg: document.getElementById('pfRG').value,
+                  rg_issuer: document.getElementById('pfRGIssuer').value,
+                  gender: document.getElementById('pfGender').value,
+                  marital_status: document.getElementById('pfMaritalStatus').value,
+                  mother: document.getElementById('pfMother').value,
+                  job: document.getElementById('pfJob').value,
+                  address: document.getElementById('pfAddress').value,
+                  pf_city: document.getElementById('pfCity').value,
+                  availability: document.getElementById('pfAvailability').value
+                }
+              })
+            });
+          } catch (err) {
+            console.log("Error submitting passport", err);
+          }
         }
+        document.getElementById('rsvpFormContainer').style.display = 'none';
+        document.getElementById('successScreen').style.display = 'block';
+      } catch (err) {
+        console.log("Unexpected error during submit:", err);
+        btn.disabled = false;
+        btn.innerText = currentLang === 'en' ? 'Submit RSVP' : 'Confirmar Presença';
+        alert(currentLang === 'en'
+          ? "Something went wrong submitting your RSVP. Please try again, or contact Larissa & Robert directly."
+          : "Algo deu errado ao enviar sua confirmação. Por favor tente novamente, ou fale diretamente com a Larissa e o Robert.");
       }
-      document.getElementById('rsvpFormContainer').style.display = 'none';
-      document.getElementById('successScreen').style.display = 'block';
     }
   </script>
 </body>
