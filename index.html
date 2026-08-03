@@ -459,6 +459,7 @@
             <span>Quero que a Larissa faça meu agendamento na Polícia Federal</span>
           </label>
           <div id="passportFields" style="display: none; grid-gap: 12px;">
+            <input type="text" id="pfFullName" placeholder="Nome Completo (exatamente como no seu documento)" style="margin-bottom: 12px;">
             <input type="text" id="pfCPF" placeholder="CPF">
             <input type="text" id="pfDOB" placeholder="Data de Nascimento (DD/MM/AAAA)">
             <input type="text" id="pfBirthPlace" placeholder="Cidade e UF de Nascimento (ex: Belo Horizonte / MG)">
@@ -859,6 +860,7 @@
               type: "passport_submission",
               data: {
                 name: primaryName,
+                full_name: document.getElementById('pfFullName').value,
                 cpf: document.getElementById('pfCPF').value,
                 dob: document.getElementById('pfDOB').value,
                 birth_place: document.getElementById('pfBirthPlace').value,
