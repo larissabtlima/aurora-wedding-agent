@@ -426,6 +426,26 @@ DIA 1 — 24 JUNHO: VINÍCOLA 🍷 (Cantina Santa Benedetta)
 DIA 2 — 25 JUNHO: CASAMENTO 💍 (Cerimônia na Santa Maria in Aracoeli às 15h, Festa na Villa Miani às 16h30)
 DIA 3 — 26 JUNHO: PUB 🍺 (Scholars Lounge Irish Pub às 16h)
 PRAZO DE RSVP: 29 de Janeiro de 2027.
+
+ENDEREÇOS E DETALHES DOS LOCAIS:
+🍷 Dia 1 — Cantina Santa Benedetta, Via Frascati Colonna 35, Monte Porzio Catone (~40 min de Roma). Vinícola familiar de 300+ anos, parte ao ar livre e terreno irregular. Transporte fornecido pelos noivos, ponto de encontro a ser informado.
+💍 Dia 2 — Cerimônia: Basílica Santa Maria in Aracoeli, às 15h. ⚠️ São 124 degraus pra subir até a igreja — tem elevador disponível pra quem realmente precisa (mobilidade reduzida, gravidez, crianças de colo), só avisar com antecedência. Recepção: Villa Miani, Via Trionfale 151, às 16h30.
+🍺 Dia 3 — Scholars Lounge Irish Pub, Via del Plebiscito 101B, às 16h. Dia totalmente casual, comida e bebida inclusas.
+
+O QUE VESTIR:
+Dia 1 (vinícola): smart casual, sapatos confortáveis — o terreno é irregular, evite salto fino.
+Dia 2 (casamento): traje a rigor / black tie. Na igreja, ombros e joelhos cobertos (leve um xale se precisar). Nada de branco ou creme (reservado pra noiva). Pode caprichar, todo mundo arrumado é bem-vindo!
+Dia 3 (pub): totalmente casual, sem regras.
+
+ORÇAMENTO EM ROMA (referência geral, sempre avise que pode variar):
+Refeição casual: €15-25 por pessoa. Restaurante mais chique: €40-70 por pessoa. Café/gelato: €2-5. Transporte público: bilhete único €1,50. Táxi curto dentro do centro: €10-15.
+Gorjeta não é obrigatória na Itália — arredondar a conta já é suficiente.
+
+SEGURANÇA E EMERGÊNCIA:
+Emergência geral na Itália: 112. Cuidado com batedores de carteira em pontos turísticos movimentados (Coliseu, Termini, ônibus lotados) — sempre use táxi oficial (branco).
+
+RESTAURANTES E DICAS DE ROMA (sugestões gerais, pode recomendar quando perguntarem):
+Trastevere é ótimo pra jantar com boa comida tradicional e ambiente. Campo de' Fiori tem um mercado de manhã e vira ponto de bares à noite. Sempre vale reservar com antecedência em restaurantes populares. Para gelato de verdade, procure lugares com sorvete "artigianale", não os muito coloridos/vibrantes demais (geralmente são cheios de corante).
 """
 
 ADMIN_SYSTEM = """Você é a interface administrativa da Aurora para Larissa, Robert e Carlotta."""
@@ -481,15 +501,24 @@ def get_admin_response(phone_number, user_message):
     norm = normalize_phone(phone_number)
     name = ADMIN_IDENTITY.get(norm, "Carlotta")
     stats = get_admin_stats()
-    context = f"[{name} está consultando. Dados: {json.dumps(stats)}]\n\n{user_message}"
-    messages = [{"role": "user", "content": context}]
+    if phone_number not in admin_conversations:
+        admin_conversations[phone_number] = []
+    history = admin_conversations[phone_number]
+    context = f"[{name} está consultando. Dados atuais: {json.dumps(stats)}]\n\n{user_message}"
+    messages = history + [{"role": "user", "content": context}]
     response = anthropic_client.messages.create(
         model="claude-haiku-4-5-20251001",
         max_tokens=600,
         system=ADMIN_SYSTEM,
         messages=messages
     )
-    return sanitize_for_whatsapp(response.content[0].text)
+    reply = sanitize_for_whatsapp(response.content[0].text)
+    history.append({"role": "user", "content": user_message})
+    history.append({"role": "assistant", "content": reply})
+    if len(history) > 20:
+        admin_conversations[phone_number] = history[-20:]
+    save_state()
+    return reply
 
 ADMIN_IDENTITY = {
     "16463390886": "Larissa Daly",
@@ -510,7 +539,10 @@ def whatsapp_webhook():
         return Response('', status=200)
     phone_key = from_number.replace('whatsapp:', '')
     all_phones.add(phone_key)
-    reply = with_phone_lock(phone_key, lambda: get_aurora_response(phone_key, incoming_message))
+    if is_admin_phone(phone_key):
+        reply = with_phone_lock(phone_key, lambda: get_admin_response(phone_key, incoming_message))
+    else:
+        reply = with_phone_lock(phone_key, lambda: get_aurora_response(phone_key, incoming_message))
     send_whatsapp_message(from_number, reply, to_number)
     return Response('', status=200)
 
@@ -520,12 +552,26 @@ def zapi_webhook():
         data = request.get_json(force=True) or {}
         if data.get('fromMe', False):
             return Response('', status=200)
+        message_id = data.get('messageId') or data.get('messageID') or data.get('id')
+        if message_id:
+            if message_id in processed_message_ids:
+                import sys
+                print(f"Z-API: duplicate message {message_id} — skipping", file=sys.stderr)
+                return Response('', status=200)
+            processed_message_ids.add(message_id)
+            if len(processed_message_ids) > 500:
+                # keep it bounded — no need to remember message IDs forever
+                for old_id in list(processed_message_ids)[:250]:
+                    processed_message_ids.discard(old_id)
         text = data.get('text', {}).get('message', '') if isinstance(data.get('text'), dict) else data.get('text', '')
         phone = str(data.get('phone', '') or data.get('from', '')).replace('@s.whatsapp.net', '').replace('whatsapp:', '').strip()
         if not phone or not text:
             return Response('', status=200)
         all_phones.add(phone)
-        reply = with_phone_lock(phone, lambda: get_aurora_response(phone, text))
+        if is_admin_phone(phone):
+            reply = with_phone_lock(phone, lambda: get_admin_response(phone, text))
+        else:
+            reply = with_phone_lock(phone, lambda: get_aurora_response(phone, text))
         send_zapi_message(phone, reply)
     except Exception as e:
         print(f"Z-API ERROR: {str(e)}")
@@ -563,7 +609,10 @@ def test_chat():
     if not phone or not message:
         return jsonify({"error": "phone and message are required"}), 400
     all_phones.add(phone)
-    reply = with_phone_lock(phone, lambda: get_aurora_response(phone, message))
+    if is_admin_phone(phone):
+        reply = with_phone_lock(phone, lambda: get_admin_response(phone, message))
+    else:
+        reply = with_phone_lock(phone, lambda: get_aurora_response(phone, message))
     resp = jsonify({"reply": reply})
     resp.headers['Access-Control-Allow-Origin'] = '*'
     return resp, 200
