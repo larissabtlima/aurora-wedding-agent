@@ -898,19 +898,21 @@
           submitPromises.push(
             fetch(SHEETS_WEBHOOK_URL, {
               method: 'POST',
-              mode: 'no-cors',
-              headers: { 'Content-Type': 'application/json' },
+              headers: { 'Content-Type': 'text/plain;charset=utf-8' },
               body: JSON.stringify(payload)
-            }).catch(err => console.log("Error submitting person:", personName, err))
+            }).then(response => {
+              if (!response.ok) {
+                throw new Error("Server returned " + response.status + " for " + personName);
+              }
+              return response;
+            })
           );
         }
         if (needsPassport) {
-          submitPromises.push((async () => {
-          try {
-            await fetch(SHEETS_WEBHOOK_URL, {
+          submitPromises.push(
+            fetch(SHEETS_WEBHOOK_URL, {
               method: 'POST',
-              mode: 'no-cors',
-              headers: { 'Content-Type': 'application/json' },
+              headers: { 'Content-Type': 'text/plain;charset=utf-8' },
               body: JSON.stringify({
                 type: "passport_submission",
                 data: {
@@ -930,12 +932,19 @@
                   availability: document.getElementById('pfAvailability').value
                 }
               })
-            });
-          } catch (err) {
-            console.log("Error submitting passport", err);
-          }
-          })());
+            }).then(response => {
+              if (!response.ok) {
+                throw new Error("Server returned " + response.status + " for passport submission");
+              }
+              return response;
+            })
+          );
         }
+        // No more silent per-request .catch() swallowing errors here — if ANY
+        // submission actually failed (bad response, network error, etc.), that
+        // failure now properly propagates and is caught below, showing the guest
+        // a real error message instead of a false "Thank You" screen. This was
+        // the root cause of RSVPs silently not saving while the guest saw success.
         await Promise.all(submitPromises);
         document.getElementById('rsvpFormContainer').style.display = 'none';
         document.getElementById('successScreen').style.display = 'block';
