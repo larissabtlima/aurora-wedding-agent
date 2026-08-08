@@ -447,56 +447,19 @@
           <label id="lblPhone">WhatsApp Phone Number</label>
           <input type="tel" id="guestPhone" placeholder="+353... or +55..." required>
         </div>
-        <!-- Complete Brazilian Passport Section -->
+        <!-- Complete Brazilian Passport Section — dynamic, one card per party member -->
         <div class="box-section" id="passportSection" style="display: none;">
           <h3>🛂 Agendamento de Passaporte Brasileiro</h3>
           <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 10px;">
-            A Larissa fará todo o preenchimento no site da Polícia Federal e o agendamento para você! Preencha os dados abaixo e faça a transferência da taxa.
+            A Larissa fará todo o preenchimento no site da Polícia Federal e o agendamento para você! Preencha os dados abaixo e faça a transferência da taxa para cada pessoa que precisar.
           </p>
-
           <div class="pix-box">
             <b>Taxa da Polícia Federal: R$ 257,25 (Comum)</b><br>
             Chave PIX (Larissa): <code>13005770613</code><br>
             <i>Envie o comprovante para a Larissa após realizar o PIX.</i>
           </div>
-          <label class="checkbox-card" style="margin-bottom: 12px;">
-            <input type="checkbox" id="chkNeedPassport" onchange="togglePassportFields(this.checked)">
-            <span>Quero que a Larissa faça meu agendamento na Polícia Federal</span>
-          </label>
-          <div id="passportFields" style="display: none; grid-gap: 12px;">
-            <input type="text" id="pfFullName" placeholder="Nome Completo (exatamente como no seu documento)" style="margin-bottom: 12px;">
-            <input type="text" id="pfCPF" placeholder="CPF">
-            <input type="text" id="pfDOB" placeholder="Data de Nascimento (DD/MM/AAAA)">
-            <input type="text" id="pfBirthPlace" placeholder="Cidade e UF de Nascimento (ex: Belo Horizonte / MG)">
-
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-              <input type="text" id="pfRG" placeholder="Número do RG">
-              <input type="text" id="pfRGIssuer" placeholder="Órgão Emissor / UF (ex: SSP/MG)">
-            </div>
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-              <select id="pfGender">
-                <option value="">Sexo</option>
-                <option value="Feminino">Feminino</option>
-                <option value="Masculino">Masculino</option>
-              </select>
-              <select id="pfMaritalStatus">
-                <option value="">Estado Civil</option>
-                <option value="Solteiro(a)">Solteiro(a)</option>
-                <option value="Casado(a)">Casado(a)</option>
-                <option value="Divorciado(a)">Divorciado(a)</option>
-                <option value="Viuvo(a)">Viúvo(a)</option>
-              </select>
-            </div>
-            <input type="text" id="pfMother" placeholder="Nome Completo da Mãe">
-            <input type="text" id="pfJob" placeholder="Profissão Actual">
-            <input type="text" id="pfAddress" placeholder="Endereço Completo com CEP">
-            <input type="text" id="pfCity" placeholder="Cidade de preferência para o agendamento no posto da PF">
-
-            <div style="background: #FFF; padding: 10px; border-radius: 6px; border: 1px solid var(--border);">
-              <label style="font-size: 0.75rem; color: var(--primary); margin-bottom: 4px;">Preferência de Horário / Dias (Postos PF funcionam Seg-Sex, 8h às 17h):</label>
-              <input type="text" id="pfAvailability" placeholder="Ex: Preferência quartas ou sextas de manhã">
-            </div>
-          </div>
+          <!-- One card per party member, built by buildPassportPersonCards() -->
+          <div id="passportPersonsContainer"></div>
         </div>
         <button type="submit" class="btn-submit" id="btnSubmit">Submit RSVP</button>
       </form>
@@ -622,7 +585,7 @@
         guestNameError: "Por favor selecione seu nome na lista.",
         guestNoMatch: "Nenhum nome encontrado. Tente outra grafia, ou fale diretamente com a Larissa e o Robert.",
         txtWebsiteBtn: "Visite o Site do Casamento",
-        txtWebsiteNote: "Programação, traje, sugestões de voo &amp; hotel e tudo que você precisa saber sobre Roma"
+        txtWebsiteNote: "Programação, traje, sugestões de voo & hotel e tudo que você precisa saber sobre Roma"
       }
     };
     async function loadLiveGuestList() {
@@ -704,6 +667,7 @@
       document.getElementById('guestSearchInput').placeholder = t.guestSearchPlaceholder;
       document.getElementById('guestNameError').innerText = t.guestNameError;
       document.getElementById('passportSection').style.display = lang === 'pt' ? 'block' : 'none';
+      if (lang === 'pt') buildPassportPersonCards();
     }
     function getSelectedPartyMembers() {
       const primaryName = document.getElementById('guestDropdown').value;
@@ -745,6 +709,7 @@
         plusOneSec.style.display = 'block';
       }
       updateBreakdownSections();
+      if (currentLang === 'pt') buildPassportPersonCards();
     }
     function updateBreakdownSections() {
       const party = getSelectedPartyMembers();
@@ -834,8 +799,64 @@
         container.appendChild(div);
       });
     }
-    function togglePassportFields(show) {
-      document.getElementById('passportFields').style.display = show ? 'grid' : 'none';
+    function buildPassportPersonCards() {
+      const party = getSelectedPartyMembers();
+      const container = document.getElementById('passportPersonsContainer');
+      if (!container) return;
+      container.innerHTML = '';
+      party.forEach(function(personName) {
+        const id = safeId(personName);
+        const card = document.createElement('div');
+        card.className = 'person-card';
+        card.style.marginBottom = '16px';
+        const inp = (idSuffix, ph) => `<input type="text" id="${idSuffix}_${id}" placeholder="${ph}" style="width:100%;padding:12px 14px;border:1px solid var(--border);border-radius:6px;font-family:'Montserrat',sans-serif;font-size:0.9rem;background:#FAF9F7;margin-bottom:8px;">`;
+        card.innerHTML = `
+          <h4 style="font-family:'Cinzel',serif;color:var(--primary);margin-bottom:10px;font-size:0.9rem;">${personName}</h4>
+          <label class="checkbox-card" style="margin-bottom:12px;">
+            <input type="checkbox" id="chkPassport_${id}" onchange="togglePassportFieldsFor('${id}', this.checked)">
+            <span>Quero que a Larissa faça meu agendamento na Polícia Federal</span>
+          </label>
+          <div id="passportFields_${id}" style="display:none;">
+            ${inp('pfFullName', 'Nome Completo Legal (exatamente como no documento)')}
+            ${inp('pfPhone', 'Número de WhatsApp com DDD (ex: 31 99999-9999)')}
+            ${inp('pfCPF', 'CPF')}
+            ${inp('pfDOB', 'Data de Nascimento (DD/MM/AAAA)')}
+            ${inp('pfBirthPlace', 'Cidade e UF de Nascimento (ex: Belo Horizonte / MG)')}
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:8px;">
+              ${inp('pfRG', 'Número do RG').replace('margin-bottom:8px;','').replace('width:100%;','')}
+              ${inp('pfRGIssuer', 'Órgão Emissor / UF (ex: SSP/MG)').replace('margin-bottom:8px;','').replace('width:100%;','')}
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:8px;">
+              <select id="pfGender_${id}" style="padding:12px 14px;border:1px solid var(--border);border-radius:6px;font-family:'Montserrat',sans-serif;font-size:0.9rem;background:#FAF9F7;">
+                <option value="">Sexo</option>
+                <option value="Feminino">Feminino</option>
+                <option value="Masculino">Masculino</option>
+              </select>
+              <select id="pfMaritalStatus_${id}" style="padding:12px 14px;border:1px solid var(--border);border-radius:6px;font-family:'Montserrat',sans-serif;font-size:0.9rem;background:#FAF9F7;">
+                <option value="">Estado Civil</option>
+                <option value="Solteiro(a)">Solteiro(a)</option>
+                <option value="Casado(a)">Casado(a)</option>
+                <option value="Divorciado(a)">Divorciado(a)</option>
+                <option value="Viúvo(a)">Viúvo(a)</option>
+              </select>
+            </div>
+            ${inp('pfMother', 'Nome Completo da Mãe')}
+            ${inp('pfJob', 'Profissão Atual')}
+            ${inp('pfAddress', 'Endereço Completo com CEP')}
+            ${inp('pfCity', 'Cidade de preferência para agendamento no posto da PF')}
+            <div style="background:#FFF;padding:10px;border-radius:6px;border:1px solid var(--border);">
+              <label style="font-size:0.75rem;color:var(--primary);display:block;margin-bottom:4px;">Preferência de Horário / Dias (Postos PF funcionam Seg-Sex, 8h às 17h):</label>
+              <input type="text" id="pfAvailability_${id}" placeholder="Ex: Preferência quartas ou sextas de manhã" style="width:100%;padding:10px 14px;border:1px solid var(--border);border-radius:6px;font-family:'Montserrat',sans-serif;font-size:0.9rem;background:#FAF9F7;">
+            </div>
+          </div>
+        `;
+        container.appendChild(card);
+      });
+    }
+
+    function togglePassportFieldsFor(id, show) {
+      const el = document.getElementById('passportFields_' + id);
+      if (el) el.style.display = show ? 'block' : 'none';
     }
     async function handleFormSubmit(e) {
       e.preventDefault();
@@ -856,7 +877,7 @@
       try {
         const attendingVal = document.querySelector('input[name="attending"]:checked').value;
         const needsElevator = document.getElementById('chkElevator').checked;
-        const needsPassport = document.getElementById('chkNeedPassport') ? document.getElementById('chkNeedPassport').checked : false;
+        const needsPassport = false; // Replaced by per-person passport cards
         const sameEvents = document.querySelector('input[name="sameEvents"]:checked') ? document.querySelector('input[name="sameEvents"]:checked').value === 'yes' : true;
         const sameDiet = document.querySelector('input[name="sameDiet"]:checked') ? document.querySelector('input[name="sameDiet"]:checked').value === 'yes' : true;
         // When declining, only the primary guest is submitted, with everything cleared —
@@ -920,38 +941,44 @@
             })
           );
         }
-        if (needsPassport) {
-          submitPromises.push(
-            fetch(SHEETS_WEBHOOK_URL, {
-              method: 'POST',
-              headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-              body: JSON.stringify({
-                type: "passport_submission",
-                data: {
-                  name: primaryName,
-                  full_name: document.getElementById('pfFullName').value,
-                  cpf: document.getElementById('pfCPF').value,
-                  dob: document.getElementById('pfDOB').value,
-                  birth_place: document.getElementById('pfBirthPlace').value,
-                  rg: document.getElementById('pfRG').value,
-                  rg_issuer: document.getElementById('pfRGIssuer').value,
-                  gender: document.getElementById('pfGender').value,
-                  marital_status: document.getElementById('pfMaritalStatus').value,
-                  mother: document.getElementById('pfMother').value,
-                  job: document.getElementById('pfJob').value,
-                  address: document.getElementById('pfAddress').value,
-                  pf_city: document.getElementById('pfCity').value,
-                  availability: document.getElementById('pfAvailability').value
-                }
+        // Collect passport data for every party member that opted in
+        partyMembers.forEach(function(personName) {
+          const id = safeId(personName);
+          const chk = document.getElementById('chkPassport_' + id);
+          if (chk && chk.checked) {
+            const getVal = (field) => { const el = document.getElementById(field + '_' + id); return el ? el.value : ''; };
+            submitPromises.push(
+              fetch(SHEETS_WEBHOOK_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                body: JSON.stringify({
+                  type: "passport_submission",
+                  data: {
+                    name: personName,
+                    full_name: getVal('pfFullName'),
+                    phone: getVal('pfPhone'),
+                    cpf: getVal('pfCPF'),
+                    dob: getVal('pfDOB'),
+                    birth_place: getVal('pfBirthPlace'),
+                    rg: getVal('pfRG'),
+                    rg_issuer: getVal('pfRGIssuer'),
+                    gender: getVal('pfGender'),
+                    marital_status: getVal('pfMaritalStatus'),
+                    mother: getVal('pfMother'),
+                    job: getVal('pfJob'),
+                    address: getVal('pfAddress'),
+                    pf_city: getVal('pfCity'),
+                    availability: getVal('pfAvailability'),
+                    needs_elevator: document.getElementById('chkElevator') ? document.getElementById('chkElevator').checked : false
+                  }
+                })
+              }).then(response => {
+                if (!response.ok) throw new Error("Server returned " + response.status + " for passport: " + personName);
+                return response;
               })
-            }).then(response => {
-              if (!response.ok) {
-                throw new Error("Server returned " + response.status + " for passport submission");
-              }
-              return response;
-            })
-          );
-        }
+            );
+          }
+        });
         // No more silent per-request .catch() swallowing errors here — if ANY
         // submission actually failed (bad response, network error, etc.), that
         // failure now properly propagates and is caught below, showing the guest
