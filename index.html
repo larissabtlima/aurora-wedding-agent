@@ -677,9 +677,12 @@
       const plusOneChoice = document.getElementById('plusOneChoice').value;
       if (plusOneChoice === 'add_now') {
         const nameInput = document.getElementById('plusOneFullName').value.trim();
-        party.push(nameInput || ("Guest (" + primaryName.split(" ")[0] + ")"));
+        // Must match the FULL primary name, since that's what's actually in
+        // the sheet as "Guest (Full Primary Name)" — using just the first
+        // name here would never match the real placeholder row.
+        party.push(nameInput || ("Guest (" + primaryName + ")"));
       } else if (plusOneChoice === 'confirm_later') {
-        party.push("Guest (" + primaryName.split(" ")[0] + ")");
+        party.push("Guest (" + primaryName + ")");
       }
       return party;
     }
@@ -883,6 +886,18 @@
         // When declining, only the primary guest is submitted, with everything cleared —
         // no family/plus-one members, no days, no dietary flags, no elevator request.
         const partyMembers = attendingVal === 'no' ? [primaryName] : getSelectedPartyMembers();
+        // Figure out which single entry in partyMembers (if any) IS the plus-one,
+        // so we know which submission needs to update the "Guest (Primary Name)"
+        // placeholder row instead of trying to find a row under a brand-new name.
+        // This must match exactly what getSelectedPartyMembers() pushed.
+        const plusOneChoiceForTarget = attendingVal === 'no' ? 'none' : document.getElementById('plusOneChoice').value;
+        let plusOneEntryName = null;
+        if (plusOneChoiceForTarget === 'add_now') {
+          const nameInput = document.getElementById('plusOneFullName').value.trim();
+          plusOneEntryName = nameInput || ("Guest (" + primaryName + ")");
+        } else if (plusOneChoiceForTarget === 'confirm_later') {
+          plusOneEntryName = "Guest (" + primaryName + ")";
+        }
         // Build every person's payload first, then fire all their requests at once
         // (instead of waiting for each one to finish before starting the next).
         // This is what actually shaves the wait time down for multi-person parties —
@@ -908,8 +923,9 @@
             diet = Array.from(personDietElements).map(cb => cb.value);
           }
           const isPrimary = personName === primaryName;
-          const plusOneChoice = attendingVal === 'no' ? 'none' : document.getElementById('plusOneChoice').value;
-          let placeholderTarget = (plusOneChoice !== 'none' && !isPrimary && (personName.indexOf("Guest (") === 0 || personName === "Guest")) ? ("Guest (" + primaryName.split(" ")[0] + ")") : null;
+          // If this entry IS the plus-one (named or still just a placeholder),
+          // tell Apps Script which placeholder row to update/rename.
+          let placeholderTarget = (personName === plusOneEntryName) ? ("Guest (" + primaryName + ")") : null;
           const payload = {
             type: "rsvp",
             data: {
