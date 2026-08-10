@@ -376,7 +376,7 @@
 
             <div class="event-desc-box">
               <div class="event-desc-item" id="descDay1">
-                🍷 <b>Day 1 (24/06):</b> Winery afternoon near Rome — pasta-making class & wine tasting outdoors! Departing central Rome at 5pm.
+                🍷 <b>Day 1 (24/06):</b> Winery afternoon near Rome — pasta-making class & wine tasting outdoors! Departing central Rome at 4:30pm.
               </div>
               <div class="event-desc-item" id="descDay2">
                 💍 <b>Day 2 (25/06):</b> Ceremony at 3:30pm at Santa Maria in Aracoeli, followed by reception at Villa Miani (5pm).
@@ -431,12 +431,13 @@
           <div class="form-group" id="mainDietGroup">
             <label id="lblDietary">Dietary Restrictions</label>
             <div class="checkbox-group">
-              <label class="checkbox-card"><input type="checkbox" name="dietary" value="vegetarian"><span id="dietVeg">Vegetarian</span></label>
-              <label class="checkbox-card"><input type="checkbox" name="dietary" value="vegan"><span id="dietVegan">Vegan</span></label>
-              <label class="checkbox-card"><input type="checkbox" name="dietary" value="nut_allergy"><span id="dietNut">Nut Allergy</span></label>
-              <label class="checkbox-card"><input type="checkbox" name="dietary" value="no_beef"><span id="dietBeef">No Beef</span></label>
-              <label class="checkbox-card"><input type="checkbox" name="dietary" value="no_pork"><span id="dietPork">No Pork</span></label>
-              <label class="checkbox-card"><input type="checkbox" name="dietary" value="shellfish"><span id="dietShell">Shellfish Allergy</span></label>
+              <label class="checkbox-card"><input type="checkbox" name="dietary" value="none" onchange="handleDietNone(this)"><span id="dietNone">No dietary restrictions</span></label>
+              <label class="checkbox-card"><input type="checkbox" name="dietary" value="vegetarian" onchange="handleDietReal(this)"><span id="dietVeg">Vegetarian</span></label>
+              <label class="checkbox-card"><input type="checkbox" name="dietary" value="vegan" onchange="handleDietReal(this)"><span id="dietVegan">Vegan</span></label>
+              <label class="checkbox-card"><input type="checkbox" name="dietary" value="nut_allergy" onchange="handleDietReal(this)"><span id="dietNut">Nut Allergy</span></label>
+              <label class="checkbox-card"><input type="checkbox" name="dietary" value="no_beef" onchange="handleDietReal(this)"><span id="dietBeef">No Beef</span></label>
+              <label class="checkbox-card"><input type="checkbox" name="dietary" value="no_pork" onchange="handleDietReal(this)"><span id="dietPork">No Pork</span></label>
+              <label class="checkbox-card"><input type="checkbox" name="dietary" value="shellfish" onchange="handleDietReal(this)"><span id="dietShell">Shellfish Allergy</span></label>
             </div>
           </div>
           <!-- Individual Dietary Breakdown Container -->
@@ -502,6 +503,25 @@
       return 'p_' + name.replace(/[^a-zA-Z0-9]/g, '_');
     }
 
+    // "No dietary restrictions" is mutually exclusive with the real restrictions.
+    // It exists so guests who genuinely have none say so deliberately, instead of
+    // ticking something at random just to fill the section in. It is never sent to
+    // the sheet — value "none" is simply ignored when the payload is built.
+    function handleDietNone(box) {
+      if (!box.checked) return;
+      const group = box.closest('.checkbox-group') || document;
+      group.querySelectorAll('input[name="dietary"]').forEach(cb => {
+        if (cb !== box) cb.checked = false;
+      });
+    }
+    function handleDietReal(box) {
+      if (!box.checked) return;
+      const group = box.closest('.checkbox-group') || document;
+      group.querySelectorAll('input[name="dietary"][value="none"]').forEach(cb => {
+        cb.checked = false;
+      });
+    }
+
     const translations = {
       en: {
         bannerDeadline: "🗓 RSVP Deadline: January 29, 2027",
@@ -520,7 +540,7 @@
         txtSameDietYes: "Everyone in my party shares the same dietary preferences",
         txtSameDietNo: "Specify dietary requirements separately for each person",
         lblEvents: "Events Attending",
-        descDay1: "🍷 <b>Day 1 (24/06):</b> Winery afternoon near Rome — pasta-making class & wine tasting outdoors! Departing central Rome at 5pm.",
+        descDay1: "🍷 <b>Day 1 (24/06):</b> Winery afternoon near Rome — pasta-making class & wine tasting outdoors! Departing central Rome at 4:30pm.",
         descDay2: "💍 <b>Day 2 (25/06):</b> Ceremony at 3:30pm at Santa Maria in Aracoeli, followed by reception at Villa Miani (5pm).",
         descDay3: "🍺 <b>Day 3 (26/06):</b> Relaxed post-wedding gathering at Scholars Lounge Irish Pub!",
         txtDay1: "Thu June 24: Winery Day (Cantina Santa Benedetta)",
@@ -530,6 +550,7 @@
         lblElevatorDesc: "⚠️ The basilica has 124 steps. Elevator access is strictly limited and reserved primarily for guests with mobility issues, pregnant women, or families with small infants.",
         txtElevatorOpt: "I / someone in my party requires elevator access for the church",
         lblDietary: "Dietary Restrictions",
+        dietNone: "No dietary restrictions",
         dietVeg: "Vegetarian", dietVegan: "Vegan", dietNut: "Nut Allergy",
         dietBeef: "No Beef", dietPork: "No Pork", dietShell: "Shellfish Allergy",
         lblPhone: "WhatsApp Phone Number",
@@ -562,7 +583,7 @@
         txtSameDietYes: "Todos do grupo compartilham das mesmas restrições",
         txtSameDietNo: "Especificar restrições individualmente para cada pessoa",
         lblEvents: "Eventos que Irá Comparecer",
-        descDay1: "🍷 <b>Dia 1 (24/06):</b> Tarde na vinícola pertinho de Roma — aula de massa & degustação ao ar livre! Saída do centro de Roma às 17h.",
+        descDay1: "🍷 <b>Dia 1 (24/06):</b> Tarde na vinícola pertinho de Roma — aula de massa & degustação ao ar livre! Saída do centro de Roma às 16h30.",
         descDay2: "💍 <b>Dia 2 (25/06):</b> Cerimônia às 15h30 na Santa Maria in Aracoeli, seguida da festa no Villa Miani (17h).",
         descDay3: "🍺 <b>Dia 3 (26/06):</b> Confraternização descontraída no Scholars Lounge Irish Pub!",
         txtDay1: "24/06 (Quinta): Dia na Vinícola (Cantina Santa Benedetta)",
@@ -572,6 +593,7 @@
         lblElevatorDesc: "⚠️ A basílica possui 124 degraus. O elevador é estritamente limitado e reservado principalmente para pessoas com mobilidade reduzida, grávidas ou famílias com bebês de colo.",
         txtElevatorOpt: "Eu / alguém do meu grupo precisa do elevador para a igreja",
         lblDietary: "Restrições Alimentares",
+        dietNone: "Nenhuma restrição alimentar",
         dietVeg: "Vegetariano", dietVegan: "Vegano", dietNut: "Alergia a Nozes",
         dietBeef: "Sem Carne Vermelha", dietPork: "Sem Carne de Porco", dietShell: "Alergia a Frutos do Mar",
         lblPhone: "Número do WhatsApp",
@@ -812,14 +834,15 @@
         const div = document.createElement('div');
         div.className = 'person-card';
         div.innerHTML = `
-          <h4>${personName} — Dietary Restrictions</h4>
+          <h4>${personName} — ${currentLang === 'pt' ? 'Restrições Alimentares' : 'Dietary Restrictions'}</h4>
           <div class="checkbox-group">
-            <label class="checkbox-card"><input type="checkbox" class="indiv-diet-${id}" value="vegetarian"> Vegetarian</label>
-            <label class="checkbox-card"><input type="checkbox" class="indiv-diet-${id}" value="vegan"> Vegan</label>
-            <label class="checkbox-card"><input type="checkbox" class="indiv-diet-${id}" value="nut_allergy"> Nut Allergy</label>
-            <label class="checkbox-card"><input type="checkbox" class="indiv-diet-${id}" value="no_beef"> No Beef</label>
-            <label class="checkbox-card"><input type="checkbox" class="indiv-diet-${id}" value="no_pork"> No Pork</label>
-            <label class="checkbox-card"><input type="checkbox" class="indiv-diet-${id}" value="shellfish"> Shellfish Allergy</label>
+            <label class="checkbox-card"><input type="checkbox" class="indiv-diet-${id}" value="none" onchange="handleDietNone(this)"> ${currentLang === 'pt' ? 'Nenhuma restrição alimentar' : 'No dietary restrictions'}</label>
+            <label class="checkbox-card"><input type="checkbox" class="indiv-diet-${id}" value="vegetarian" onchange="handleDietReal(this)"> ${currentLang === 'pt' ? 'Vegetariano' : 'Vegetarian'}</label>
+            <label class="checkbox-card"><input type="checkbox" class="indiv-diet-${id}" value="vegan" onchange="handleDietReal(this)"> ${currentLang === 'pt' ? 'Vegano' : 'Vegan'}</label>
+            <label class="checkbox-card"><input type="checkbox" class="indiv-diet-${id}" value="nut_allergy" onchange="handleDietReal(this)"> ${currentLang === 'pt' ? 'Alergia a Nozes' : 'Nut Allergy'}</label>
+            <label class="checkbox-card"><input type="checkbox" class="indiv-diet-${id}" value="no_beef" onchange="handleDietReal(this)"> ${currentLang === 'pt' ? 'Sem Carne Bovina' : 'No Beef'}</label>
+            <label class="checkbox-card"><input type="checkbox" class="indiv-diet-${id}" value="no_pork" onchange="handleDietReal(this)"> ${currentLang === 'pt' ? 'Sem Carne de Porco' : 'No Pork'}</label>
+            <label class="checkbox-card"><input type="checkbox" class="indiv-diet-${id}" value="shellfish" onchange="handleDietReal(this)"> ${currentLang === 'pt' ? 'Alergia a Frutos do Mar' : 'Shellfish Allergy'}</label>
           </div>
         `;
         container.appendChild(div);
