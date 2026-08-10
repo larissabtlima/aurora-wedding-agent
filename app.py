@@ -953,7 +953,12 @@ def reset_identities():
     re-identify by introducing themselves, and the new strict matching plus the
     phone check means the rebuilt bindings are trustworthy.
 
-    Conversation history is deliberately NOT touched — only the identity map.
+    Pass {"full": true} to ALSO clear the conversation history and the phone
+    list. That matters more than it sounds: `[ALL]` broadcasts go to every
+    number Aurora has ever heard from, so numbers left over from testing would
+    be messaged for real. Sending a burst to dozens of non-existent numbers is
+    exactly how a WhatsApp number gets flagged — worth wiping before invites go
+    out, when the list is noise anyway and rebuilds itself as guests write in.
     """
     if request.method == 'OPTIONS':
         resp = Response('', status=204)
@@ -965,10 +970,28 @@ def reset_identities():
     provided = request.headers.get("X-Test-Secret", "")
     if not secret or provided != secret:
         return jsonify({"error": "unauthorized"}), 401
-    cleared = len(phone_registry)
+    body = request.get_json(silent=True) or {}
+    full = bool(body.get("full"))
+
+    cleared_ids = len(phone_registry)
     phone_registry.clear()
+
+    cleared_phones = 0
+    cleared_convos = 0
+    if full:
+        cleared_phones = len(all_phones)
+        cleared_convos = len(conversations)
+        all_phones.clear()
+        conversations.clear()
+        admin_conversations.clear()
+
     save_state()
-    resp = jsonify({"status": "ok", "cleared_identities": cleared})
+    resp = jsonify({
+        "status": "ok",
+        "cleared_identities": cleared_ids,
+        "cleared_phones": cleared_phones,
+        "cleared_conversations": cleared_convos,
+    })
     resp.headers['Access-Control-Allow-Origin'] = '*'
     return resp, 200
 
