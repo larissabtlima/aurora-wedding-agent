@@ -946,8 +946,15 @@
       };
     }
 
+    // Guards against a second submission starting while the first is still in
+    // flight. Disabling the button alone isn't enough — on a phone a quick
+    // double-tap can register both touches before the handler disables it, and
+    // that fired the whole submission twice in testing.
+    let submitInFlight = false;
+
     async function handleFormSubmit(e) {
       e.preventDefault();
+      if (submitInFlight) return;
 
       const primaryName = document.getElementById('guestDropdown').value;
       if (!primaryName) {
@@ -958,6 +965,7 @@
         return;
       }
 
+      submitInFlight = true;
       const btn = document.getElementById('btnSubmit');
       btn.disabled = true;
       btn.innerText = currentLang === 'en' ? 'Submitting...' : 'Enviando...';
@@ -987,7 +995,8 @@
         // (instead of waiting for each one to finish before starting the next).
         // This is what actually shaves the wait time down for multi-person parties —
         // each request to Google still takes 1-3s on their end, but they now overlap.
-        const submitPromises = [];
+        const memberPayloads = [];
+        const passportPayloads = [];
         for (let personName of partyMembers) {
           const id = safeId(personName);
           let days = [];
@@ -1011,31 +1020,21 @@
           // If this entry IS the plus-one (named or still just a placeholder),
           // tell Apps Script which placeholder row to update/rename.
           let placeholderTarget = (personName === plusOneEntryName) ? ("Guest (" + primaryName + ")") : null;
-          const payload = {
-            type: "rsvp",
-            data: {
-              name: personName,
-              placeholder_target: placeholderTarget,
-              phone: isPrimary ? document.getElementById('guestPhone').value : "",
-              attending: attendingVal,
-              days: days,
-              needs_elevator: attendingVal === 'no' ? false : needsElevator,
-              needs_passport: isPrimary ? needsPassport : false,
-              dietary_vegetarian: diet.indexOf('vegetarian') !== -1,
-              dietary_vegan: diet.indexOf('vegan') !== -1,
-              dietary_nut_allergy: diet.indexOf('nut_allergy') !== -1,
-              dietary_no_beef: diet.indexOf('no_beef') !== -1,
-              dietary_no_pork: diet.indexOf('no_pork') !== -1,
-              dietary_shellfish: diet.indexOf('shellfish') !== -1
-            }
-          };
-          submitPromises.push(
-            fetch(SHEETS_WEBHOOK_URL, {
-              method: 'POST',
-              headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-              body: JSON.stringify(payload)
-            }).then(checkSheetsResponse(personName))
-          );
+          memberPayloads.push({
+            name: personName,
+            placeholder_target: placeholderTarget,
+            phone: isPrimary ? document.getElementById('guestPhone').value : "",
+            attending: attendingVal,
+            days: days,
+            needs_elevator: attendingVal === 'no' ? false : needsElevator,
+            needs_passport: isPrimary ? needsPassport : false,
+            dietary_vegetarian: diet.indexOf('vegetarian') !== -1,
+            dietary_vegan: diet.indexOf('vegan') !== -1,
+            dietary_nut_allergy: diet.indexOf('nut_allergy') !== -1,
+            dietary_no_beef: diet.indexOf('no_beef') !== -1,
+            dietary_no_pork: diet.indexOf('no_pork') !== -1,
+            dietary_shellfish: diet.indexOf('shellfish') !== -1
+          });
         }
         // Collect passport data for every party member that opted in
         partyMembers.forEach(function(personName) {
@@ -1043,45 +1042,49 @@
           const chk = document.getElementById('chkPassport_' + id);
           if (chk && chk.checked) {
             const getVal = (field) => { const el = document.getElementById(field + '_' + id); return el ? el.value : ''; };
-            submitPromises.push(
-              fetch(SHEETS_WEBHOOK_URL, {
-                method: 'POST',
-                headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-                body: JSON.stringify({
-                  type: "passport_submission",
-                  data: {
-                    name: personName,
-                    full_name: getVal('pfFullName'),
-                    phone: getVal('pfPhone'),
-                    cpf: getVal('pfCPF'),
-                    dob: getVal('pfDOB'),
-                    birth_place: getVal('pfBirthPlace'),
-                    rg: getVal('pfRG'),
-                    rg_issuer: getVal('pfRGIssuer'),
-                    gender: getVal('pfGender'),
-                    marital_status: getVal('pfMaritalStatus'),
-                    mother: getVal('pfMother'),
-                    job: getVal('pfJob'),
-                    address: getVal('pfAddress'),
-                    pf_city: getVal('pfCity'),
-                    availability: getVal('pfAvailability'),
-                    needs_elevator: document.getElementById('chkElevator') ? document.getElementById('chkElevator').checked : false
-                  }
-                })
-              }).then(checkSheetsResponse("passport: " + personName))
-            );
+            passportPayloads.push({
+              name: personName,
+              full_name: getVal('pfFullName'),
+              phone: getVal('pfPhone'),
+              cpf: getVal('pfCPF'),
+              dob: getVal('pfDOB'),
+              birth_place: getVal('pfBirthPlace'),
+              rg: getVal('pfRG'),
+              rg_issuer: getVal('pfRGIssuer'),
+              gender: getVal('pfGender'),
+              marital_status: getVal('pfMaritalStatus'),
+              mother: getVal('pfMother'),
+              job: getVal('pfJob'),
+              address: getVal('pfAddress'),
+              pf_city: getVal('pfCity'),
+              availability: getVal('pfAvailability'),
+              needs_elevator: document.getElementById('chkElevator') ? document.getElementById('chkElevator').checked : false
+            });
           }
         });
-        // No more silent per-request .catch() swallowing errors here — if ANY
-        // submission actually failed (bad response, network error, etc.), that
-        // failure now properly propagates and is caught below, showing the guest
-        // a real error message instead of a false "Thank You" screen. This was
-        // the root cause of RSVPs silently not saving while the guest saw success.
-        await Promise.all(submitPromises);
+
+        // ONE request for the whole party (and their passport forms).
+        // This used to be one request per person. Because the Apps Script side
+        // serialises writes behind a lock, a six-person family took over twenty
+        // seconds and two families submitting at once could exceed the lock
+        // timeout and fail outright. Measured live before the change: eight
+        // requests took 28 seconds. One request removes the queue entirely.
+        //
+        // Errors are not swallowed: if the script fails, checkSheetsResponse
+        // throws and the guest sees a real error instead of a false "Thank You".
+        await fetch(SHEETS_WEBHOOK_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify({
+            type: "rsvp_batch",
+            data: { members: memberPayloads, passports: passportPayloads }
+          })
+        }).then(checkSheetsResponse(primaryName + "'s party"));
         document.getElementById('rsvpFormContainer').style.display = 'none';
         document.getElementById('successScreen').style.display = 'block';
       } catch (err) {
         console.log("Unexpected error during submit:", err);
+        submitInFlight = false; // let them try again
         btn.disabled = false;
         btn.innerText = currentLang === 'en' ? 'Submit RSVP' : 'Confirmar Presença';
         alert(currentLang === 'en'
