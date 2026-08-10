@@ -157,6 +157,24 @@ def normalize_phone(p):
     return cleaned
 
 
+def phones_look_like_same_person(a, b):
+    """Compare two phone numbers tolerantly.
+
+    Guests type whatever they like into the RSVP form — "31 99999-8888",
+    "087 123 4567", "(31) 99999-8888" — while WhatsApp always reports the full
+    international number. Comparing them exactly would reject real guests, so
+    we compare the last 8 digits, which is enough to identify a subscriber
+    while ignoring country codes, trunk zeros and formatting.
+    """
+    da = "".join(ch for ch in str(a) if ch.isdigit())
+    db = "".join(ch for ch in str(b) if ch.isdigit())
+    # Too short to be a real phone number (blank cell, "n/a", a stray digit).
+    # Never lock a guest out over unusable data on file.
+    if len(da) < 7 or len(db) < 7:
+        return True
+    return da[-8:] == db[-8:]
+
+
 def is_admin_phone(p):
     return normalize_phone(p) in ADMIN_NUMBERS_NORMALIZED
 
@@ -440,6 +458,29 @@ def build_guest_context_note(phone_number, user_message):
     record = GUEST_DIRECTORY.get(name.split(" (")[0].strip().lower())
     if not record:
         return UNIDENTIFIED_NOTE
+
+    # Phone check. Identification is still name-based, which on its own means
+    # anyone who knows a guest's name could claim to be them and be told that
+    # guest's accommodation, RSVP and bridal-party status. Where we already
+    # KNOW the guest's number (they gave it on the RSVP form), require it to
+    # match before sharing anything personal.
+    #
+    # This only ever blocks a genuine mismatch: guests with no number on file
+    # are unaffected, so it costs nothing today and gets stricter automatically
+    # as RSVPs come in.
+    known_phone = str(record.get("phone") or "").strip()
+    if known_phone and not phones_look_like_same_person(known_phone, phone_number):
+        phone_registry.pop(phone_number, None)
+        save_state()
+        return (
+            "\n\n[NOTA INTERNA — NÃO leia isso em voz alta: a pessoa diz ser "
+            f"{record.get('name')}, mas está escrevendo de um número diferente do que "
+            "temos registrado para essa pessoa. NÃO confirme nem revele NENHUM dado "
+            "pessoal (acomodação, RSVP, cortejo, grupo, telefone). Seja simpática e "
+            "ajude normalmente com informações gerais e públicas do casamento. Se a "
+            "pessoa insistir em dados pessoais, explique gentilmente que por segurança "
+            "esses dados só podem ser tratados diretamente com a Larissa ou o Robert.]"
+        )
 
     if record.get("accommodation_confirmed"):
         accommodation_note = "A acomodação (hotel) dela(e) já está confirmada/reservada."
