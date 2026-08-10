@@ -495,18 +495,13 @@ def build_guest_context_note(phone_number, user_message):
         else "Essa pessoa é uma convidada normal (não faz parte do cortejo/bridal party)."
     )
 
-    # Registered language — a TIEBREAKER only, for messages too short to read
-    # ("ok", an emoji, a number). A clear message in either language always wins,
-    # because the sheet can be wrong or blank and the guest in front of you can't be.
-    lang_code = str(record.get("language") or "").strip().upper()
-    if lang_code == "PT":
-        lang_note = (" Idioma registrado na lista: português (use SOMENTE para desempatar"
-                     " se a mensagem for curta/ambígua demais para saber).")
-    elif lang_code == "EN":
-        lang_note = (" Idioma registrado na lista: inglês (use SOMENTE para desempatar"
-                     " se a mensagem for curta/ambígua demais para saber).")
-    else:
-        lang_note = ""
+    # The guest's registered language is deliberately NOT passed to the model.
+    # It was, briefly, as a "tiebreaker for ambiguous messages" — and in testing
+    # it did the opposite: Mary Daly (registered EN) wrote in Portuguese and got
+    # an English reply, because the hint outweighed the actual message. The
+    # language of what the guest just typed is the only signal worth having, and
+    # it's one the model reads perfectly well on its own.
+    lang_note = ""
 
     rsvp_note = "Ainda não confirmou presença (RSVP)."
     if record.get("attending"):
@@ -565,10 +560,11 @@ SYSTEM_PROMPT = """Você é Aurora, a assistente virtual e concierge oficial do 
   responder a uma pergunta em inglês com "Here are all three celebration days:" seguido de
   "*DIA 1 — 24 de JUNHO*". Se a resposta é em inglês, seria "*DAY 1 — 24 JUNE*".
   Traduza TUDO, inclusive horários no formato local ("15h30" em português, "3:30 PM" em inglês).
-- Se a NOTA INTERNA informar o idioma registrado dessa pessoa na lista de convidados, use isso
-  apenas para desempatar quando a mensagem for ambígua demais para saber (um emoji sozinho,
-  "ok", um número). Uma mensagem clara em um idioma SEMPRE vence o idioma registrado.
-- Se ainda assim não der para saber, responda em inglês e ofereça português numa linha curta.
+- O idioma da mensagem do convidado é o ÚNICO sinal que importa. Não existe idioma "registrado"
+  ou "esperado" para uma pessoa: um convidado irlandês pode escrever em português e um
+  brasileiro em inglês, e nos dois casos você responde no idioma que ELE escreveu.
+- Se a mensagem for curta demais para saber (só um emoji, "ok", um número), responda em inglês
+  e ofereça português numa linha curta.
 - Se o convidado trocar de idioma no meio da conversa, troque junto, imediatamente.
 ═════════════════════════════════════════════════════════════
 
