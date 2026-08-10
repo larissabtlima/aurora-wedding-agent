@@ -171,6 +171,7 @@ load_state()
 # ============================================================
 GUEST_DIRECTORY = {}
 PARTY_MAP = {}  # name (lowercase) -> list of linked/party member display names
+GUEST_TOTAL_ROWS = 0  # every row in the sheet, including vacant "Guest (X)" slots
 _directory_last_load = 0
 
 
@@ -192,20 +193,41 @@ def load_guest_directory(force=False):
             return
         new_directory = {}
         new_party_map = {}
+        total_rows = 0
         for row in data:
             full_name = (row.get("name") or "").strip()
             if not full_name:
                 continue
+            total_rows += 1
             base_key = full_name.split(" (")[0].strip().lower()
+
+            # Vacant plus-one slots are all literally named "Guest (Someone)",
+            # so they ALL collapsed onto the single key "guest" and overwrote
+            # each other — 42 rows silently became 1, which is why the guest
+            # total Aurora quoted was short by 42. They aren't real people yet,
+            # so they're counted but never stored as a lookup identity.
+            if base_key == "guest":
+                continue
+
             new_directory[base_key] = row
-            # Build party links: "Conor Cahill (Linda Cahill)" -> attach Conor to Linda's party
+
+            # Party links, e.g. "Conor Cahill (Linda Cahill)".
+            # These are BIDIRECTIONAL: whichever of the two people messages
+            # Aurora, she needs to know the other one is in their group.
+            # Previously only Linda knew about Conor, never the reverse.
             if "(" in full_name and full_name.endswith(")"):
                 inside = full_name[full_name.index("(") + 1:-1].strip()
                 outside = full_name[:full_name.index("(")].strip()
-                if inside and inside.lower() != outside.lower():
-                    new_party_map.setdefault(inside.lower(), []).append(outside)
+                if inside and outside and inside.lower() != outside.lower() and outside.lower() != "guest":
+                    new_party_map.setdefault(inside.lower(), [])
+                    if outside not in new_party_map[inside.lower()]:
+                        new_party_map[inside.lower()].append(outside)
+                    new_party_map.setdefault(outside.lower(), [])
+                    if inside not in new_party_map[outside.lower()]:
+                        new_party_map[outside.lower()].append(inside)
         GUEST_DIRECTORY = new_directory
         PARTY_MAP = new_party_map
+        globals()["GUEST_TOTAL_ROWS"] = total_rows
         _directory_last_load = time.time()
         import sys
         print(f"GUEST DIRECTORY: loaded {len(GUEST_DIRECTORY)} guests", file=sys.stderr)
@@ -217,12 +239,83 @@ def load_guest_directory(force=False):
 load_guest_directory(force=True)
 
 
+# ---------------------------------------------------------------------------
+# WHO AM I TALKING TO?
+#
+# This used to be dangerously loose: any name mentioned anywhere in a message
+# could bind that phone number to that guest, permanently and silently. Asking
+# "a Mary Daly vai no casamento?" was enough to make Aurora treat the sender AS
+# Mary and disclose her accommodation status, RSVP and bridal-party role to a
+# stranger. Confirmed reproducible in live testing.
+#
+# Identification is now deliberately strict:
+#   1. Only an explicit SELF-INTRODUCTION can bind a phone to a guest.
+#      A question about somebody else never can.
+#   2. The extracted name must match a guest STRONGLY — full name, or a unique
+#      first/last name. If two guests could match, Aurora binds nobody.
+#   3. If unidentified, no personal data is shared at all; Aurora asks for a
+#      full name first.
+# ---------------------------------------------------------------------------
+
+SELF_INTRO_PATTERNS = [
+    r"\bmeu nome (?:é|eh|e)\s+(.+)",
+    r"\baqui (?:é|eh|e)\s+(?:a|o)?\s*(.+)",
+    r"\b(?:eu )?sou (?:a|o)?\s*(.+)",
+    r"\bquem fala (?:é|eh|e)\s+(?:a|o)?\s*(.+)",
+    r"\bfala (?:a|o)\s+(.+)",
+    r"\bmy name is\s+(.+)",
+    r"\bi'?m\s+(.+)",
+    r"\bi am\s+(.+)",
+    r"\bthis is\s+(.+)",
+    r"\bit'?s\s+(.+?)\s+here\b",
+]
+
+
+def extract_self_introduction(message):
+    """Return the name the sender claims for THEMSELVES, or None.
+
+    Only fires on explicit self-introduction phrasing. A message that merely
+    mentions another guest's name returns None, by design.
+    """
+    import re
+    text = (message or "").strip()
+    if not text:
+        return None
+    low = text.lower()
+
+    # A question is never a self-introduction ("a Mary vai?", "is Mary coming?")
+    if "?" in text:
+        return None
+
+    for pattern in SELF_INTRO_PATTERNS:
+        m = re.search(pattern, low)
+        if m:
+            candidate = m.group(1)
+            # Stop at the first sentence/clause boundary so we don't swallow
+            # the rest of the message ("sou a Ana e a Mary vai também").
+            candidate = re.split(r"[,.;!\n]| e | and | but | mas ", candidate)[0]
+            candidate = candidate.strip(" .,!-'\"")
+            if 2 <= len(candidate) <= 60:
+                return candidate
+
+    # A message that is nothing but a name ("Mary Daly") also counts as an
+    # introduction — there's nothing else it could mean.
+    words = re.findall(r"[A-Za-zÀ-ÿ']+", text)
+    if 1 <= len(words) <= 4 and len(text) <= 40 and text == " ".join(words):
+        return text.strip()
+
+    return None
+
+
 def find_known_guest(name_query):
-    """Fuzzy-match a free-text name against the LIVE guest directory."""
+    """Match a claimed name against the live directory. Strict: returns a name
+    only when exactly ONE guest matches. Ambiguity returns None."""
     import re
     load_guest_directory()
-    FILLER_WORDS = {"im", "i'm", "eu", "sou", "meu", "nome", "name", "is", "e", "é", "the", "o", "a"}
-    q = name_query.lower().strip()
+    FILLER_WORDS = {"im", "i'm", "eu", "sou", "meu", "nome", "name", "is", "e", "é",
+                    "the", "o", "a", "ola", "olá", "oi", "hi", "hello", "bom", "dia",
+                    "boa", "tarde", "noite"}
+    q = (name_query or "").lower().strip()
     if not q:
         return None
     q_tokens = [t for t in re.findall(r"[a-zà-ú']+", q) if t not in FILLER_WORDS]
@@ -231,31 +324,45 @@ def find_known_guest(name_query):
     q_clean = " ".join(q_tokens)
 
     all_names = [rec.get("name", key) for key, rec in GUEST_DIRECTORY.items()]
-    for known in all_names:
-        if known.lower() == q_clean:
-            return known
 
-    best = None
-    best_score = 0
-    for known in all_names:
-        k = known.lower()
-        k_tokens = set(re.findall(r"[a-zà-ú']+", k))
-        if q_clean in k_tokens:
-            overlap = 100
-        else:
-            overlap = len(set(q_tokens) & k_tokens)
-        if overlap == 0:
-            for qt in q_tokens:
-                if not (3 <= len(qt) <= 4):
-                    continue
-                for kt in k_tokens:
-                    if len(kt) >= 3 and (kt.startswith(qt) or qt.startswith(kt)):
-                        overlap += 1
-                        break
-        if overlap > best_score:
-            best_score = overlap
-            best = known
-    return best if best_score > 0 else None
+    # 1. Exact full-name match, ignoring any "(Partner)" suffix.
+    exact = [n for n in all_names if n.split(" (")[0].strip().lower() == q_clean]
+    if len(exact) == 1:
+        return exact[0]
+    if len(exact) > 1:
+        return None  # genuinely ambiguous — refuse rather than guess
+
+    # 2. Every word the sender gave appears in the guest's name (e.g. "Mary Daly"
+    #    matching "Mary Daly", or "Larissa Lima" matching "Larissa Lima (Robert Daly)").
+    #    Requires at least two words, so a bare surname can't match.
+    if len(q_tokens) >= 2:
+        subset = []
+        for n in all_names:
+            k_tokens = set(re.findall(r"[a-zà-ú']+", n.split(" (")[0].strip().lower()))
+            if set(q_tokens).issubset(k_tokens):
+                subset.append(n)
+        if len(subset) == 1:
+            return subset[0]
+        if len(subset) > 1:
+            return None
+
+    # 3. A single word only works if it's a UNIQUE first name in the whole list.
+    if len(q_tokens) == 1:
+        token = q_tokens[0]
+        if len(token) < 3:
+            return None
+        first_name_hits = []
+        for n in all_names:
+            base = n.split(" (")[0].strip().lower()
+            parts = re.findall(r"[a-zà-ú']+", base)
+            if parts and parts[0] == token:
+                first_name_hits.append(n)
+        if len(first_name_hits) == 1:
+            return first_name_hits[0]
+
+    # Anything less certain than the above is not good enough to hand over
+    # someone's personal details.
+    return None
 
 
 def sanitize_for_whatsapp(text):
@@ -269,20 +376,41 @@ def sanitize_for_whatsapp(text):
     return text.strip()
 
 
+UNIDENTIFIED_NOTE = (
+    "\n\n[NOTA INTERNA — NÃO leia isso em voz alta: você ainda NÃO sabe com quem está "
+    "falando. É PROIBIDO afirmar ou sugerir o nome dessa pessoa, e é PROIBIDO revelar "
+    "qualquer dado pessoal de qualquer convidado (acomodação, hotel, RSVP, cortejo/bridal "
+    "party, grupo/acompanhantes, telefone). Se a pessoa perguntar sobre OUTRO convidado, "
+    "não confirme nem negue nada sobre essa outra pessoa — explique gentilmente que você "
+    "só pode falar sobre os dados de quem está conversando com você, e apenas depois de "
+    "se identificar. Você PODE ajudar normalmente com informações gerais e públicas do "
+    "casamento: datas, locais, horários, dress code, voos, hotéis recomendados, dicas de "
+    "Roma, passaporte e o link do RSVP. Se precisar dos dados pessoais da pessoa, peça "
+    "gentilmente o NOME COMPLETO dela primeiro.]"
+)
+
+
 def build_guest_context_note(phone_number, user_message):
     load_guest_directory()
     name = phone_registry.get(phone_number)
-    if not name:
-        matched = find_known_guest(user_message)
-        if matched:
+
+    # Only an explicit self-introduction can bind (or re-bind) this phone to a
+    # guest. A self-introduction later in the conversation overrides an earlier
+    # one, so a guest who was matched wrongly can correct it just by saying
+    # "meu nome é ...".
+    claimed = extract_self_introduction(user_message)
+    if claimed:
+        matched = find_known_guest(claimed)
+        if matched and matched != name:
             phone_registry[phone_number] = matched
             name = matched
             save_state()
+
     if not name:
-        return ""
+        return UNIDENTIFIED_NOTE
     record = GUEST_DIRECTORY.get(name.split(" (")[0].strip().lower())
     if not record:
-        return ""
+        return UNIDENTIFIED_NOTE
 
     if record.get("accommodation_confirmed"):
         accommodation_note = "A acomodação (hotel) dela(e) já está confirmada/reservada."
@@ -482,9 +610,15 @@ def get_admin_stats():
     records = list(GUEST_DIRECTORY.values())
     attending = sum(1 for r in records if r.get("attending"))
     not_attending = sum(1 for r in records if r.get("not_attending"))
-    total = len(records)
+    # Count every row in the sheet, including the vacant "Guest (X)" plus-one
+    # slots. Those aren't stored as lookup identities (they'd all collide on the
+    # key "guest"), so counting the dictionary alone under-reported the total.
+    total = GUEST_TOTAL_ROWS or len(records)
+    named_total = len(records)
     return {
         "total_guests": total,
+        "named_guests": named_total,
+        "unnamed_plus_one_slots": max(total - named_total, 0),
         "attending": attending,
         "not_attending": not_attending,
         "awaiting_rsvp": total - attending - not_attending,
