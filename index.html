@@ -617,9 +617,27 @@
         return;
       }
 
+      // Rank matches so the person you're actually searching for always
+      // wins the top spot. Plain alphabetical sorting caused a real bug:
+      // searching "Robert Daly" matched BOTH "Robert Daly" himself AND
+      // "Larissa Lima (Robert Daly)" (her name contains his), and
+      // alphabetically "Larissa..." sorted first — so guests tapping the
+      // top suggestion landed on the wrong person without noticing.
+      // Fix: an exact match or a name that STARTS WITH the query always
+      // ranks above a name that merely CONTAINS the query somewhere inside
+      // (like a parenthetical), before falling back to alphabetical order.
+      function matchRank(nameLower) {
+        if (nameLower === query) return 0;
+        if (nameLower.startsWith(query)) return 1;
+        return 2;
+      }
       const matches = guestList
         .filter(g => !g.isPlaceholder && g.name.toLowerCase().includes(query))
-        .sort((a, b) => a.name.localeCompare(b.name))
+        .sort((a, b) => {
+          const rankDiff = matchRank(a.name.toLowerCase()) - matchRank(b.name.toLowerCase());
+          if (rankDiff !== 0) return rankDiff;
+          return a.name.localeCompare(b.name);
+        })
         .slice(0, 8);
 
       visibleSuggestions = matches;
