@@ -741,6 +741,11 @@
         buildIndividualEventsFields(party);
         buildIndividualDietFields(party);
       }
+      // Keep the passport cards in step with who's actually in the party.
+      // Without this, unticking a family member left their passport card on
+      // screen (and adding a plus-one gave them no card at all), so the
+      // passport list could disagree with the people being submitted.
+      if (currentLang === 'pt') buildPassportPersonCards();
     }
     function handleAttendingChange(val) {
       const wrapper = document.getElementById('rsvpDetailsWrapper');
@@ -820,7 +825,46 @@
         container.appendChild(div);
       });
     }
+    // Passport data the guest has already typed, kept outside the DOM so it
+    // survives a rebuild. These cards get rebuilt whenever the party changes or
+    // the attendance radio is touched, and previously that silently wiped
+    // everything the guest had entered — a Brazilian guest could fill in their
+    // full passport details, click "decline" then "accept" again by mistake,
+    // and lose the lot with no warning. Confirmed in live testing.
+    const passportDraft = {};
+
+    const PASSPORT_FIELDS = ['pfFullName','pfPhone','pfCPF','pfDOB','pfBirthPlace',
+      'pfRG','pfRGIssuer','pfGender','pfMaritalStatus','pfMother','pfJob',
+      'pfAddress','pfCity','pfAvailability'];
+
+    function savePassportDraft() {
+      document.querySelectorAll('[id^="chkPassport_"]').forEach(function(chk) {
+        const id = chk.id.replace('chkPassport_', '');
+        const entry = { checked: chk.checked };
+        PASSPORT_FIELDS.forEach(function(f) {
+          const el = document.getElementById(f + '_' + id);
+          if (el) entry[f] = el.value;
+        });
+        passportDraft[id] = entry;
+      });
+    }
+
+    function restorePassportDraft(id) {
+      const entry = passportDraft[id];
+      if (!entry) return;
+      const chk = document.getElementById('chkPassport_' + id);
+      if (chk && entry.checked) {
+        chk.checked = true;
+        togglePassportFieldsFor(id, true);
+      }
+      PASSPORT_FIELDS.forEach(function(f) {
+        const el = document.getElementById(f + '_' + id);
+        if (el && entry[f] !== undefined) el.value = entry[f];
+      });
+    }
+
     function buildPassportPersonCards() {
+      savePassportDraft();
       const party = getSelectedPartyMembers();
       const container = document.getElementById('passportPersonsContainer');
       if (!container) return;
@@ -872,6 +916,7 @@
           </div>
         `;
         container.appendChild(card);
+        restorePassportDraft(id);
       });
     }
 
@@ -879,6 +924,28 @@
       const el = document.getElementById('passportFields_' + id);
       if (el) el.style.display = show ? 'block' : 'none';
     }
+    // Apps Script answers HTTP 200 even when the script itself threw, putting
+    // the real outcome in the JSON body. Checking only response.ok therefore
+    // reported "success" for submissions that saved nothing at all — that is
+    // exactly how every passport submission failed unnoticed. Read the body.
+    function checkSheetsResponse(personName) {
+      return async function(response) {
+        if (!response.ok) {
+          throw new Error("Server returned " + response.status + " for " + personName);
+        }
+        let body;
+        try {
+          body = JSON.parse(await response.text());
+        } catch (err) {
+          return response; // non-JSON reply: nothing more we can check
+        }
+        if (body && body.status === "error") {
+          throw new Error((body.message || "Unknown error") + " (" + personName + ")");
+        }
+        return response;
+      };
+    }
+
     async function handleFormSubmit(e) {
       e.preventDefault();
 
@@ -967,12 +1034,7 @@
               method: 'POST',
               headers: { 'Content-Type': 'text/plain;charset=utf-8' },
               body: JSON.stringify(payload)
-            }).then(response => {
-              if (!response.ok) {
-                throw new Error("Server returned " + response.status + " for " + personName);
-              }
-              return response;
-            })
+            }).then(checkSheetsResponse(personName))
           );
         }
         // Collect passport data for every party member that opted in
@@ -1006,10 +1068,7 @@
                     needs_elevator: document.getElementById('chkElevator') ? document.getElementById('chkElevator').checked : false
                   }
                 })
-              }).then(response => {
-                if (!response.ok) throw new Error("Server returned " + response.status + " for passport: " + personName);
-                return response;
-              })
+              }).then(checkSheetsResponse("passport: " + personName))
             );
           }
         });
