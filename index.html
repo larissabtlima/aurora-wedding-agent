@@ -1072,7 +1072,15 @@
         //
         // Errors are not swallowed: if the script fails, checkSheetsResponse
         // throws and the guest sees a real error instead of a false "Thank You".
-        await fetch(SHEETS_WEBHOOK_URL, {
+        // Retry on failure. When 242 guests get their invitations at once, a
+        // handful of submissions will collide — a request times out, or Google
+        // briefly refuses because too many are in flight. Retrying quietly two
+        // more times, with a randomised pause so the retries don't all bunch up
+        // again, turns "sorry, something went wrong" into a slightly slower
+        // success. The guest sees "Submitting..." the whole time and never
+        // knows. Writes are idempotent (each submission fully overwrites the
+        // guest's row), so retrying is always safe.
+        const submitOnce = () => fetch(SHEETS_WEBHOOK_URL, {
           method: 'POST',
           headers: { 'Content-Type': 'text/plain;charset=utf-8' },
           body: JSON.stringify({
@@ -1080,6 +1088,22 @@
             data: { members: memberPayloads, passports: passportPayloads }
           })
         }).then(checkSheetsResponse(primaryName + "'s party"));
+
+        let lastErr = null;
+        for (let attempt = 0; attempt < 3; attempt++) {
+          try {
+            await submitOnce();
+            lastErr = null;
+            break;
+          } catch (err) {
+            lastErr = err;
+            if (attempt < 2) {
+              const wait = 2000 * (attempt + 1) + Math.floor(Math.random() * 2000);
+              await new Promise(r => setTimeout(r, wait));
+            }
+          }
+        }
+        if (lastErr) throw lastErr;
         document.getElementById('rsvpFormContainer').style.display = 'none';
         document.getElementById('successScreen').style.display = 'block';
       } catch (err) {
