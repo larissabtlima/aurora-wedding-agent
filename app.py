@@ -179,6 +179,29 @@ def is_admin_phone(p):
     return normalize_phone(p) in ADMIN_NUMBERS_NORMALIZED
 
 
+# Being an admin used to hijack the whole conversation: every message Larissa,
+# Robert or Carlotta sent came back as a statistics report, so they could never
+# see what an actual guest sees — or just ask Aurora a normal question.
+#
+# Admin numbers now get the ORDINARY guest experience by default, and reach the
+# admin side deliberately with a prefix. Same idea as the existing [ALL] and
+# [BRIDAL] broadcast commands, so there's one consistent habit to remember.
+ADMIN_PREFIXES = ("[admin]", "/admin", "#admin", "admin:")
+
+
+def is_admin_query(msg):
+    m = (msg or "").strip().lower()
+    return any(m.startswith(p) for p in ADMIN_PREFIXES)
+
+
+def strip_admin_prefix(msg):
+    m = (msg or "").strip()
+    for p in ADMIN_PREFIXES:
+        if m.lower().startswith(p):
+            return m[len(p):].strip() or "resumo geral"
+    return m
+
+
 load_state()
 
 # ============================================================
@@ -949,7 +972,12 @@ def zapi_webhook():
                 send_zapi_message(phone, broadcast_result)
                 save_state()
                 return Response('', status=200)
-            reply = with_phone_lock(phone, lambda: get_admin_response(phone, text))
+            if is_admin_query(text):
+                q = strip_admin_prefix(text)
+                reply = with_phone_lock(phone, lambda: get_admin_response(phone, q))
+            else:
+                # Admins chat exactly like guests unless they ask for admin data.
+                reply = with_phone_lock(phone, lambda: get_aurora_response(phone, text))
         else:
             reply = with_phone_lock(phone, lambda: get_aurora_response(phone, text))
         send_zapi_message(phone, reply)
@@ -995,8 +1023,11 @@ def test_chat():
         broadcast_result = try_handle_broadcast(phone, message)
         if broadcast_result is not None:
             reply = broadcast_result
+        elif is_admin_query(message):
+            q = strip_admin_prefix(message)
+            reply = with_phone_lock(phone, lambda: get_admin_response(phone, q))
         else:
-            reply = with_phone_lock(phone, lambda: get_admin_response(phone, message))
+            reply = with_phone_lock(phone, lambda: get_aurora_response(phone, message))
     else:
         reply = with_phone_lock(phone, lambda: get_aurora_response(phone, message))
     resp = jsonify({"reply": reply})
