@@ -192,8 +192,10 @@ def load_guest_directory(force=False):
             print(f"GUEST DIRECTORY ERROR (server side): {data.get('error')}", file=sys.stderr)
             return
         new_directory = {}
-        new_party_map = {}
         total_rows = 0
+        pairs = []      # (person, household anchor) both as display names
+        display = {}    # lowercase -> display spelling
+
         for row in data:
             full_name = (row.get("name") or "").strip()
             if not full_name:
@@ -210,21 +212,48 @@ def load_guest_directory(force=False):
                 continue
 
             new_directory[base_key] = row
+            display.setdefault(base_key, full_name.split(" (")[0].strip())
 
-            # Party links, e.g. "Conor Cahill (Linda Cahill)".
-            # These are BIDIRECTIONAL: whichever of the two people messages
-            # Aurora, she needs to know the other one is in their group.
-            # Previously only Linda knew about Conor, never the reverse.
             if "(" in full_name and full_name.endswith(")"):
                 inside = full_name[full_name.index("(") + 1:-1].strip()
                 outside = full_name[:full_name.index("(")].strip()
-                if inside and outside and inside.lower() != outside.lower() and outside.lower() != "guest":
-                    new_party_map.setdefault(inside.lower(), [])
-                    if outside not in new_party_map[inside.lower()]:
-                        new_party_map[inside.lower()].append(outside)
-                    new_party_map.setdefault(outside.lower(), [])
-                    if inside not in new_party_map[outside.lower()]:
-                        new_party_map[outside.lower()].append(inside)
+                if inside and outside and inside.lower() != outside.lower():
+                    display.setdefault(inside.lower(), inside)
+                    display.setdefault(outside.lower(), outside)
+                    pairs.append((outside.lower(), inside.lower()))
+
+        # HOUSEHOLD GROUPING (union-find), matching the RSVP form exactly.
+        # Everyone linked to the same person forms one household and each member
+        # knows about every other member. Previously this was a one-way pair map:
+        # Linda knew about her five children, but none of them knew about her or
+        # each other, so Aurora's answers changed depending on who asked.
+        parent = {}
+
+        def _root(x):
+            parent.setdefault(x, x)
+            while parent[x] != x:
+                parent[x] = parent[parent[x]]
+                x = parent[x]
+            return x
+
+        for a, b in pairs:
+            parent.setdefault(a, a)
+            parent.setdefault(b, b)
+            ra, rb = _root(a), _root(b)
+            if ra != rb:
+                parent[rb] = ra
+
+        households = {}
+        for key in list(parent.keys()):
+            households.setdefault(_root(key), []).append(key)
+
+        new_party_map = {}
+        for members in households.values():
+            for me in members:
+                others = [display.get(o, o) for o in members if o != me]
+                if others:
+                    new_party_map[me] = others
+
         GUEST_DIRECTORY = new_directory
         PARTY_MAP = new_party_map
         globals()["GUEST_TOTAL_ROWS"] = total_rows
