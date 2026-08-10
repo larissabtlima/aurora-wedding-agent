@@ -495,6 +495,19 @@ def build_guest_context_note(phone_number, user_message):
         else "Essa pessoa é uma convidada normal (não faz parte do cortejo/bridal party)."
     )
 
+    # Registered language — a TIEBREAKER only, for messages too short to read
+    # ("ok", an emoji, a number). A clear message in either language always wins,
+    # because the sheet can be wrong or blank and the guest in front of you can't be.
+    lang_code = str(record.get("language") or "").strip().upper()
+    if lang_code == "PT":
+        lang_note = (" Idioma registrado na lista: português (use SOMENTE para desempatar"
+                     " se a mensagem for curta/ambígua demais para saber).")
+    elif lang_code == "EN":
+        lang_note = (" Idioma registrado na lista: inglês (use SOMENTE para desempatar"
+                     " se a mensagem for curta/ambígua demais para saber).")
+    else:
+        lang_note = ""
+
     rsvp_note = "Ainda não confirmou presença (RSVP)."
     if record.get("attending"):
         rsvp_note = "Já confirmou presença (RSVP: vai)."
@@ -518,7 +531,7 @@ def build_guest_context_note(phone_number, user_message):
 
     return (
         f"\n\n[NOTA INTERNA — NÃO leia isso em voz alta nem repita literalmente, use apenas para responder com precisão sobre a PESSOA ATUAL: "
-        f"Nome confirmado na lista de convidados: {record.get('name')}. {special_note} {accommodation_note} {rsvp_note}{party_note}{vip_note} "
+        f"Nome confirmado na lista de convidados: {record.get('name')}.{lang_note} {special_note} {accommodation_note} {rsvp_note}{party_note}{vip_note} "
         f"Nunca revele dados de OUTROS convidados fora do grupo dessa pessoa, apenas desta pessoa e do grupo dela.]"
     )
 
@@ -541,6 +554,24 @@ def log_to_sheets(data_type, data):
 
 
 SYSTEM_PROMPT = """Você é Aurora, a assistente virtual e concierge oficial do casamento de Larissa e Robert em Roma, junho de 2027.
+
+═══ IDIOMA — REGRA ABSOLUTA, VALE PARA TODAS AS MENSAGENS ═══
+- Responda SEMPRE no mesmo idioma da mensagem mais recente do convidado. Escreveu em
+  inglês → responda 100% em inglês. Escreveu em português → responda 100% em português.
+- Estas instruções estão escritas em português. Isso NÃO significa que você deva responder
+  em português. O idioma da resposta é decidido pela mensagem do convidado, nunca por este prompt.
+- É PROIBIDO misturar os dois idiomas na mesma resposta. Isso inclui títulos, cabeçalhos,
+  nomes de dias e rótulos de listas. Exemplo REAL de erro já cometido, que não pode se repetir:
+  responder a uma pergunta em inglês com "Here are all three celebration days:" seguido de
+  "*DIA 1 — 24 de JUNHO*". Se a resposta é em inglês, seria "*DAY 1 — 24 JUNE*".
+  Traduza TUDO, inclusive horários no formato local ("15h30" em português, "3:30 PM" em inglês).
+- Se a NOTA INTERNA informar o idioma registrado dessa pessoa na lista de convidados, use isso
+  apenas para desempatar quando a mensagem for ambígua demais para saber (um emoji sozinho,
+  "ok", um número). Uma mensagem clara em um idioma SEMPRE vence o idioma registrado.
+- Se ainda assim não der para saber, responda em inglês e ofereça português numa linha curta.
+- Se o convidado trocar de idioma no meio da conversa, troque junto, imediatamente.
+═════════════════════════════════════════════════════════════
+
 NÃO COLETE NEM ALTERE RSVPS DIRETAMENTE NO CHAT:
 - Você NÃO é responsável por coletar, registrar ou alterar confirmações de presença (RSVP) no chat.
 - Sempre que um convidado perguntar sobre RSVP, quiser confirmar presença ou perguntar "Eu já confirmei/respondi ao RSVP?", forneça o link do formulário oficial de RSVP:
@@ -913,6 +944,35 @@ def test_chat():
     else:
         reply = with_phone_lock(phone, lambda: get_aurora_response(phone, message))
     resp = jsonify({"reply": reply})
+    resp.headers['Access-Control-Allow-Origin'] = '*'
+    return resp, 200
+
+
+@app.route('/reset-identities', methods=['POST', 'OPTIONS'])
+def reset_identities():
+    """Clear the saved phone → guest-name bindings.
+
+    Those bindings accumulated under the old loose matching (and from testing),
+    so some may point at the wrong person. Wiping them is safe: guests simply
+    re-identify by introducing themselves, and the new strict matching plus the
+    phone check means the rebuilt bindings are trustworthy.
+
+    Conversation history is deliberately NOT touched — only the identity map.
+    """
+    if request.method == 'OPTIONS':
+        resp = Response('', status=204)
+        resp.headers['Access-Control-Allow-Origin'] = '*'
+        resp.headers['Access-Control-Allow-Headers'] = 'Content-Type, X-Test-Secret'
+        resp.headers['Access-Control-Allow-Methods'] = 'POST, OPTIONS'
+        return resp
+    secret = os.environ.get("TEST_CHAT_SECRET", "")
+    provided = request.headers.get("X-Test-Secret", "")
+    if not secret or provided != secret:
+        return jsonify({"error": "unauthorized"}), 401
+    cleared = len(phone_registry)
+    phone_registry.clear()
+    save_state()
+    resp = jsonify({"status": "ok", "cleared_identities": cleared})
     resp.headers['Access-Control-Allow-Origin'] = '*'
     return resp, 200
 
