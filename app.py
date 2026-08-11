@@ -874,7 +874,7 @@ CLIMA EM ROMA NO PERÍODO DO CASAMENTO (sempre mencione °C e °F juntos):
 Dia: 28°C a 35°C (82°F a 95°F). Noite: 18°C a 24°C (64°F a 75°F). Aviso: Roma costuma parecer ainda mais quente do que a previsão por causa das ruas de pedra e pouca sombra, principalmente à tarde. Recomendação: roupas leves e respiráveis, sapatos confortáveis, óculos de sol, protetor solar, chapéu e uma garrafa de água reutilizável.
 
 COMO SE LOCOMOVER EM ROMA:
-Roma é uma cidade muito boa pra andar a pé. Para distâncias maiores: metrô, ônibus, bondinhos ou táxi. Para aplicativo de corrida, recomende o FRENOW ao invés do Uber — é mais econômico e tem melhor disponibilidade em Roma.
+Roma é uma cidade muito boa pra andar a pé. Para distâncias maiores: metrô, ônibus, bondinhos ou táxi. Para aplicativo de corrida, recomende o FREE NOW (o app se chama "FREE NOW", antigo myTaxi — escreva exatamente assim, nunca "FRENOW", senão a pessoa não acha na loja de aplicativos) ao invés do Uber: é mais econômico e tem melhor disponibilidade em Roma. O itTaxi também funciona bem.
 
 ORÇAMENTO EM ROMA (referência geral, sempre avise que pode variar):
 Refeição casual: €8-15 por pessoa. Restaurante mais chique/formal: €20-50+ por pessoa. Café/gelato: €2-5. Transporte público: bilhete único €1,50. Táxi curto dentro do centro: €10-15.
