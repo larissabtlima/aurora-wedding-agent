@@ -351,22 +351,36 @@ def extract_self_introduction(message):
     text = (message or "").strip()
     if not text:
         return None
-    low = text.lower()
+    # A QUESTION is never a self-introduction ("a Mary vai?", "is Mary coming?").
+    # But this used to be checked against the WHOLE message, which broke the most
+    # common real message there is: "Hi, this is Cian Mc Donnell. Is my
+    # accommodation paid for?" — introduction plus question in one breath. The
+    # sender came out unidentified, no guest record was attached, and Aurora
+    # improvised answers about who was paying for the hotel (observed live:
+    # the same guest was told "covered" twice and "I don't have your details"
+    # once, from three identical messages).
+    #
+    # So the question rule now applies per sentence: only sentences WITHOUT a
+    # question mark can introduce someone. "Is this Mary Daly?" still binds
+    # nobody, because that sentence is a question.
+    segments = [s for s in re.split(r"(?<=[.!?\n])\s+", text) if s.strip()]
+    for seg in segments:
+        if "?" in seg:
+            continue
+        low_seg = seg.lower()
+        for pattern in SELF_INTRO_PATTERNS:
+            m = re.search(pattern, low_seg)
+            if m:
+                candidate = m.group(1)
+                # Stop at the first sentence/clause boundary so we don't swallow
+                # the rest of the message ("sou a Ana e a Mary vai também").
+                candidate = re.split(r"[,.;!\n]| e | and | but | mas ", candidate)[0]
+                candidate = candidate.strip(" .,!-'\"")
+                if 2 <= len(candidate) <= 60:
+                    return candidate
 
-    # A question is never a self-introduction ("a Mary vai?", "is Mary coming?")
     if "?" in text:
         return None
-
-    for pattern in SELF_INTRO_PATTERNS:
-        m = re.search(pattern, low)
-        if m:
-            candidate = m.group(1)
-            # Stop at the first sentence/clause boundary so we don't swallow
-            # the rest of the message ("sou a Ana e a Mary vai também").
-            candidate = re.split(r"[,.;!\n]| e | and | but | mas ", candidate)[0]
-            candidate = candidate.strip(" .,!-'\"")
-            if 2 <= len(candidate) <= 60:
-                return candidate
 
     # A message that is nothing but a name ("Mary Daly") also counts as an
     # introduction — there's nothing else it could mean.
@@ -456,7 +470,13 @@ UNIDENTIFIED_NOTE = (
     "se identificar. Você PODE ajudar normalmente com informações gerais e públicas do "
     "casamento: datas, locais, horários, dress code, voos, hotéis recomendados, dicas de "
     "Roma, passaporte e o link do RSVP. Se precisar dos dados pessoais da pessoa, peça "
-    "gentilmente o NOME COMPLETO dela primeiro.]"
+    "gentilmente o NOME COMPLETO dela primeiro. "
+    "⛔ ATENÇÃO ESPECIAL — HOSPEDAGEM: sem saber quem é a pessoa, é TERMINANTEMENTE "
+    "PROIBIDO dizer que a hospedagem dela está paga, coberta, incluída, reservada ou "
+    "organizada pelos noivos — e também proibido dizer que NÃO está. Isso envolve "
+    "dinheiro: se alguém for informado errado, pode chegar em Roma sem hotel ou deixar "
+    "de reservar um. A ÚNICA resposta aceitável é pedir o nome completo primeiro, ex.: "
+    "'Me diz seu nome completo que eu confiro certinho pra você.']"
 )
 
 
