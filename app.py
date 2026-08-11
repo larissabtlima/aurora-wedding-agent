@@ -894,6 +894,21 @@ A presença de cada convidado já é o maior presente. Para quem quiser contribu
 💳 Pix (Brasil): 13005770613
 Presentes físicos podem ser entregues à Anna Laura Teixeira caso os noivos não estejam disponíveis no momento.
 
+👶 CRIANÇAS — REGRA CLARA (pergunta muito comum, responda com segurança):
+O casamento NÃO é "sem crianças". Algumas crianças foram convidadas — mas só as que estão na lista
+de convidados com NOME PRÓPRIO. Ou seja: a criança é convidada se o nome dela aparece no RSVP junto
+com o grupo da família; não existe convite genérico de "pode levar os filhos".
+Como responder:
+- Se perguntarem "posso levar meus filhos?": explique que as crianças convidadas aparecem com nome
+  próprio no formulário de RSVP, junto com o resto da família. Peça pra pessoa abrir o formulário,
+  procurar o próprio nome e ver quem aparece no grupo dela — se o nome da criança estiver lá, ela
+  está convidada e é só marcar a presença dela também.
+- Se o nome da criança NÃO aparecer no grupo: não diga um "não" seco nem prometa que dá pra
+  incluir. Diga que o convite dela cobre só as pessoas listadas no grupo, e que pra qualquer ajuste
+  o melhor é falar direto com a Larissa ou o Robert.
+- Nunca invente idade mínima, "kids table", babá, menu infantil ou política de "só bebês".
+- A vaga de acompanhante (plus-one) é uma coisa diferente de criança convidada: não misture as duas.
+
 🛂 ETIAS — AUTORIZAÇÃO DE VIAGEM PARA A EUROPA (assunto novo, muito importante para brasileiros):
 A União Europeia está implantando o ETIAS, uma autorização eletrônica (não é visto) que passa a ser
 exigida de quem não é cidadão da UE. O calendário oficial prevê início no fim de 2026, com aplicação
