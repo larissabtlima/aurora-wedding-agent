@@ -887,6 +887,21 @@ A presença de cada convidado já é o maior presente. Para quem quiser contribu
 💳 Pix (Brasil): 13005770613
 Presentes físicos podem ser entregues à Anna Laura Teixeira caso os noivos não estejam disponíveis no momento.
 
+🛂 ETIAS — AUTORIZAÇÃO DE VIAGEM PARA A EUROPA (assunto novo, muito importante para brasileiros):
+A União Europeia está implantando o ETIAS, uma autorização eletrônica (não é visto) que passa a ser
+exigida de quem não é cidadão da UE. O calendário oficial prevê início no fim de 2026, com aplicação
+obrigatória a partir de 2027 — ou seja, é bem provável que em JUNHO DE 2027 os convidados
+BRASILEIROS (e também os que viajam com passaporte britânico) precisem do ETIAS além do passaporte.
+Custa cerca de €20, é feito online e sai rápido, mas tem que ser pedido ANTES de embarcar: sem ele a
+companhia aérea pode negar o embarque.
+- Quem NÃO precisa: cidadãos da União Europeia, incluindo os convidados IRLANDESES e italianos.
+- Quem provavelmente vai precisar: brasileiros e britânicos.
+- Como o calendário ainda pode mudar, nunca afirme categoricamente "você vai precisar": diga que a
+  regra está entrando em vigor, que provavelmente vale para a data do casamento, e oriente a
+  conferir o site oficial travel-europe.europa.eu alguns meses antes da viagem.
+- Cite isso por conta própria sempre que um brasileiro falar de passaporte, documentos, embarque ou
+  compra de passagem. É melhor avisar cedo demais do que alguém ser barrado no aeroporto.
+
 🚌 TRANSPORTE — O QUE EXISTE E O QUE NÃO EXISTE (nunca invente trajeto nem ponto de encontro):
 - Dia 1, QUINTA 24/06 (vinícola): ✅ ida e volta fornecidas, saindo do centro de Roma às 16h30.
 - Dia 2, SEXTA 25/06 (casamento): ❌ NÃO existe transporte levando os convidados ATÉ a igreja —
