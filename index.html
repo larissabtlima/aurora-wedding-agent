@@ -568,6 +568,7 @@
         guestSearchPlaceholder: "Start typing your name…",
         guestNameError: "Please select your name from the list.",
         guestNoMatch: "No matching name found. Try a different spelling, or contact Larissa & Robert directly.",
+        guestLoading: "Loading the guest list… one moment.",
         txtWebsiteBtn: "Explore Our Wedding Website",
         txtWebsiteNote: "Schedule, dress code, flight & hotel suggestions and everything you need for Rome"
       },
@@ -616,17 +617,54 @@
         guestSearchPlaceholder: "Comece a digitar seu nome…",
         guestNameError: "Por favor selecione seu nome na lista.",
         guestNoMatch: "Nenhum nome encontrado. Tente outra grafia, ou fale diretamente com a Larissa e o Robert.",
+        guestLoading: "Carregando a lista de convidados… só um segundo.",
         txtWebsiteBtn: "Visite o Site do Casamento",
         txtWebsiteNote: "Programação, traje, sugestões de voo & hotel e tudo que você precisa saber sobre Roma"
       }
     };
+    // The guest list comes from the sheet, and that round trip takes 2-3
+    // seconds. Nothing showed while it was in flight, so anyone who started
+    // typing straight away saw an empty box and concluded the form was broken.
+    // Three things fix it: a cached copy shows instantly on any repeat visit,
+    // a "loading" line appears if the list genuinely isn't there yet, and the
+    // search re-runs by itself the moment the list lands — so a guest who
+    // typed early gets their results without touching anything.
+    const GUEST_CACHE_KEY = 'auroraGuestListV1';
+    let guestListReady = false;
+
+    function refreshSuggestionsAfterLoad() {
+      const input = document.getElementById('guestSearchInput');
+      const hidden = document.getElementById('guestDropdown');
+      if (!input || !hidden) return;
+      if (input.value.trim().length >= 2 && !hidden.value) {
+        handleGuestSearchInput(input.value);
+      }
+    }
+
     async function loadLiveGuestList() {
       try {
+        const cached = JSON.parse(localStorage.getItem(GUEST_CACHE_KEY) || 'null');
+        if (Array.isArray(cached) && cached.length) {
+          guestList = cached;
+          guestListReady = true;
+          refreshSuggestionsAfterLoad();
+        }
+      } catch (e) {}
+
+      // Always refresh in the background, so a name corrected in the sheet is
+      // live on the next page view rather than stuck in the cache.
+      try {
         const response = await fetch(SHEETS_WEBHOOK_URL);
-        guestList = await response.json();
+        const fresh = await response.json();
+        if (Array.isArray(fresh) && fresh.length) {
+          guestList = fresh;
+          try { localStorage.setItem(GUEST_CACHE_KEY, JSON.stringify(fresh)); } catch (e) {}
+        }
       } catch (e) {
-        guestList = [];
+        if (!guestListReady) guestList = [];
       }
+      guestListReady = true;
+      refreshSuggestionsAfterLoad();
     }
     loadLiveGuestList();
 
@@ -645,6 +683,15 @@
       if (query.length < 2) {
         box.style.display = 'none';
         box.innerHTML = '';
+        visibleSuggestions = [];
+        return;
+      }
+
+      // Typed before the list arrived. Say so, rather than showing an empty
+      // box that reads as "your name isn't on the guest list".
+      if (!guestListReady && guestList.length === 0) {
+        box.innerHTML = `<div class="guest-suggestion-empty">${translations[currentLang].guestLoading}</div>`;
+        box.style.display = 'block';
         visibleSuggestions = [];
         return;
       }
