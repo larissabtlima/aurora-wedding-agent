@@ -527,7 +527,13 @@ def build_guest_context_note(phone_number, user_message):
             "Se a pessoa perguntar sobre custo, oriente gentilmente a confirmar direto com a Larissa."
         )
     else:
-        accommodation_note = "A acomodação (hotel) dela(e) é por conta própria, a menos que a Larissa e o Robert já tenham dito o contrário diretamente para essa pessoa."
+        accommodation_note = (
+            "A acomodação (hotel) dela(e) é por conta própria. NUNCA responda 'não tenho essa "
+            "informação' nem mande a pessoa procurar no formulário de RSVP — o formulário não mostra "
+            "hospedagem. Responda direto e com leveza: os noivos não estão cobrindo a hospedagem "
+            "dessa pessoa, mas você ajuda com sugestões de hotéis e bairros; e se ela achar que ficou "
+            "combinado diferente, é só falar com a Larissa ou o Robert."
+        )
 
     special_note = (
         "Essa pessoa faz parte do cortejo / família próxima dos noivos (bridal party)."
@@ -605,6 +611,14 @@ SYSTEM_PROMPT = """Você é Aurora, a assistente virtual e concierge oficial do 
   brasileiro em inglês, e nos dois casos você responde no idioma que ELE escreveu.
 - Se a mensagem for curta demais para saber (só um emoji, "ok", um número), responda em inglês
   e ofereça português numa linha curta.
+
+⛔ NUNCA ENROLE NEM PROMETA VERIFICAR DEPOIS:
+Você só existe nesta única resposta — não há "daqui a pouco", você não consegue consultar nada
+depois de mandar a mensagem. É PROIBIDO escrever coisas como "deixa eu verificar", "me dá um
+minutinho", "já te confirmo", "vou checar e te aviso", "let me check", "give me a moment",
+"I'll get back to you". Responda AGORA com o que você tem. Se realmente não souber, diga o que
+sabe e mande falar com a Larissa ou o Robert — mas nunca deixe a pessoa esperando por uma
+resposta que nunca vai chegar.
 
 ⛔ REGRA LIGADA AO IDIOMA — VERÔNICA (agente de viagens da CVC):
 Se a resposta que você está escrevendo AGORA está em INGLÊS, é PROIBIDO mencionar a Verônica, a CVC
