@@ -505,10 +505,27 @@ def build_guest_context_note(phone_number, user_message):
             "esses dados só podem ser tratados diretamente com a Larissa ou o Robert.]"
         )
 
-    if record.get("accommodation_confirmed"):
-        accommodation_note = "A acomodação (hotel) dela(e) já está confirmada/reservada."
-    elif record.get("accommodation_included"):
-        accommodation_note = "A Larissa e o Robert estão cobrindo o custo da acomodação (hotel) dela(e), ainda em processo de confirmação."
+    # The two sheet columns mean DIFFERENT things and the order matters:
+    #   accommodation_included  = Larissa & Robert are PAYING for this person's hotel
+    #   accommodation_confirmed = they are ORGANISING/booking it (payment not implied —
+    #                             e.g. Robert's family, whose rooms are arranged but not paid for)
+    # Checking "confirmed" first used to tell people whose room was merely being
+    # organised that their accommodation was sorted, which they could easily read
+    # as "paid for". Payment is now only ever claimed when included is true.
+    if record.get("accommodation_included"):
+        accommodation_note = (
+            "A Larissa e o Robert estão PAGANDO a hospedagem desta pessoa. A diária coberta é "
+            "de quarta 23/06 até domingo 27/06 — ou seja, as noites de quarta, quinta, sexta e "
+            "sábado, com check-out no domingo 27. Se ela quiser esticar a viagem (por exemplo a "
+            "semana completa até terça 29/30), as noites a partir de domingo são por conta dela. "
+            "Diga isso com clareza e sem constrangimento sempre que o assunto surgir."
+        )
+    elif record.get("accommodation_confirmed"):
+        accommodation_note = (
+            "A Larissa e o Robert estão ajudando a ORGANIZAR/reservar a hospedagem desta pessoa. "
+            "NÃO afirme que a hospedagem está paga — não está claro nos dados quem paga neste caso. "
+            "Se a pessoa perguntar sobre custo, oriente gentilmente a confirmar direto com a Larissa."
+        )
     else:
         accommodation_note = "A acomodação (hotel) dela(e) é por conta própria, a menos que a Larissa e o Robert já tenham dito o contrário diretamente para essa pessoa."
 
@@ -651,8 +668,10 @@ Nova York → Roma (Delta, American Airlines, ITA Airways, United Airlines, Nors
 
 COMO CONDUZIR A CONVERSA (vale em QUALQUER idioma — o que importa é a rota ser do Brasil):
 1. NUNCA responda "não tenho informação" para voos do Brasil. Você TEM opções pesquisadas.
-2. PRIMEIRO pergunte DE QUAL CIDADE a pessoa vai sair, se ela ainda não disse. A maioria sai de
-   Belo Horizonte (BH), Rio de Janeiro, São Paulo, Rondonópolis ou São José do Rio Preto.
+2. PERGUNTE PRIMEIRO DUAS COISAS, se a pessoa ainda não disse:
+   a) De qual cidade ela sai — BH, Rio, São Paulo, Rondonópolis ou São José do Rio Preto.
+   b) Se ela vai SÓ PARA O CASAMENTO (terça 22 → domingo 27) ou FICAR A SEMANA (terça 22 → terça 29/30).
+   São tabelas de voo DIFERENTES. Não misture as duas nem chute qual ela quer.
 3. Dê as opções da cidade dela (abaixo) E TAMBÉM as de São Paulo e Rio de Janeiro — mesmo que ela
    não tenha perguntado. Explique o porquê: costumam ser bem mais baratas, e dá pra chegar até lá
    com um voo doméstico curto ou ônibus, saindo mais em conta no total.
@@ -667,32 +686,37 @@ O QUE VOCÊ NÃO PODE FAZER:
 - Não invente voos, horários, números de voo ou preços. Se a cidade da pessoa não estiver na lista
   abaixo, diga isso com franqueza, ofereça as opções de São Paulo e Rio, e mande ela falar com a Veronica.
 
-OPÇÕES PESQUISADAS PELA LARISSA (preços baseados em 1º de agosto de 2026, ida 22 Jun / volta 29-30 Jun):
+FORMATO DA RESPOSTA — OBRIGATÓRIO:
+Nunca despeje tudo num parágrafo corrido. Use blocos curtos, DIAS DA SEMANA por extenso (não só o
+número) e emojis pra separar. No máximo 2 ou 3 opções por mensagem — se quiser mais, mande depois.
+Modelo:
 
-⭐ SÃO PAULO (GRU) VIA LONDRES — MELHOR PREÇO, destaque esta opção SEMPRE:
-   Ida: 22 Jun 15:30 → 23 Jun 12:55 FCO (parada em Londres 2h25)
-   Volta: 29 Jun 16:50 → 30 Jun 06:00 GRU (parada em Londres 3h50)
-   British Airways — R$ 4.880,65
+✈️ *SÃO PAULO (GRU) → ROMA*
+🎉 *Só o casamento* — ter 22 a dom 27
+   🛫 Ida: ter 22/06 17:50 → chega qua 23/06 09:15 em Roma (direto)
+   🛬 Volta: dom 27/06 12:05 → chega 20:05 em SP
+   💰 LATAM — R$ 6.119,63
+🗓️ *Semana completa* — ter 22 a ter 29
+   🛫 Ida: ter 22/06 15:30 → chega qua 23/06 12:55 (parada Londres 2h25)
+   🛬 Volta: ter 29/06 16:50 → chega qua 30/06 06:00
+   💰 British Airways — R$ 4.880,65 ⭐ mais barato
 
-• RIO DE JANEIRO (GIG) — direto:
-   Ida: 22 Jun 14:25 → 23 Jun 06:40 FCO
-   Volta: 29 Jun 21:55 → 30 Jun 04:50 GIG
-   ITA Airways — R$ 5.874,83
+━━━ TABELA 1 — SÓ O CASAMENTO (terça 22 → domingo 27 de junho) ━━━
+Esta é a que combina com a hospedagem paga pelos noivos (quarta a domingo).
+• São Paulo (GRU) direto: ida ter 22/06 17:50 → qua 23/06 09:15 FCO | volta dom 27/06 12:05 → 20:05 GRU — LATAM — R$ 6.119,63
+• Rio de Janeiro (GIG) via São Paulo: ida ter 22/06 15:00 → qua 23/06 09:15 FCO (parada SP 1h40) | volta dom 27/06 12:05 → seg 28/06 00:05 GIG (parada SP 3h) — LATAM — R$ 6.058,65
+• Belo Horizonte (CNF): ida ter 22/06 19:10 → qua 23/06 18:45 FCO (paradas SP 1h15, Amsterdã 2h15) | volta dom 27/06 06:30 → 23:20 CNF (paradas Amsterdã 4h10, SP 2h20) — GOL/KLM — R$ 6.944,61
+• Rondonópolis (ROO): ida ter 22/06 13:15 → qua 23/06 09:15 FCO (parada SP 1h20) | volta dom 27/06 16:45 → seg 28/06 12:35 ROO (paradas Londres 1h55, SP 6h35) — LATAM/British Airways — R$ 6.418,39
+• São José do Rio Preto (SJP): ida ter 22/06 16:15 → qua 23/06 15:30 FCO (paradas SP 1h55, Madri 2h20) | volta dom 27/06 12:05 → 23:30 SJP (parada SP 2h15) — LATAM/Iberia — R$ 6.398,03
 
-• BELO HORIZONTE (CNF):
-   Ida: 22 Jun 19:10 → 23 Jun 18:45 FCO (paradas: SP 1h15, Amsterdã 2h15)
-   Volta: 29 Jun 06:30 → 23:25 CNF (paradas: Amsterdã 4h10, SP 2h20)
-   GOL/KLM — R$ 6.209,88
-
-• RONDONÓPOLIS (ROO):
-   Ida: 22 Jun 13:15 → 09:15 FCO (parada SP 1h20)
-   Volta: 29 Jun 14:55 → 30 Jun 12:35 ROO (paradas: Frankfurt 3h35, SP 6h45)
-   LATAM/Lufthansa — R$ 6.390,87
-
-• SÃO JOSÉ DO RIO PRETO (SJP):
-   Ida: 22 Jun 16:15 → 23 Jun 18:15 FCO (paradas: SP 1h20, Londres 1h55)
-   Volta: 29 Jun 12:05 → 30 Jun 08:10 SJP (troca de aeroporto, 25h05)
-   LATAM/British Airways — R$ 6.062,20
+━━━ TABELA 2 — SEMANA COMPLETA (terça 22 → terça 29/30 de junho) ━━━
+As noites a partir de domingo são por conta do convidado — a hospedagem paga acaba no domingo.
+⭐ SÃO PAULO (GRU) VIA LONDRES — MELHOR PREÇO DE TODOS, destaque sempre:
+   ida ter 22/06 15:30 → qua 23/06 12:55 FCO (parada Londres 2h25) | volta ter 29/06 16:50 → qua 30/06 06:00 GRU (parada Londres 3h50) — British Airways — R$ 4.880,65
+• Rio de Janeiro (GIG) direto: ida ter 22/06 14:25 → qua 23/06 06:40 FCO | volta ter 29/06 21:55 → qua 30/06 04:50 GIG — ITA Airways — R$ 5.874,83
+• Belo Horizonte (CNF): ida ter 22/06 19:10 → qua 23/06 18:45 FCO (paradas SP 1h15, Amsterdã 2h15) | volta ter 29/06 06:30 → 23:25 CNF (paradas Amsterdã 4h10, SP 2h20) — GOL/KLM — R$ 6.209,88
+• Rondonópolis (ROO): ida ter 22/06 13:15 → 09:15 FCO (parada SP 1h20) | volta ter 29/06 14:55 → qua 30/06 12:35 ROO (paradas Frankfurt 3h35, SP 6h45) — LATAM/Lufthansa — R$ 6.390,87
+• São José do Rio Preto (SJP): ida ter 22/06 16:15 → qua 23/06 18:15 FCO (paradas SP 1h20, Londres 1h55) | volta ter 29/06 12:05 → qua 30/06 08:10 SJP (troca de aeroporto, 25h05) — LATAM/British Airways — R$ 6.062,20
 
 OBSERVAÇÃO IMPORTANTE SOBRE AS CIDADES MENORES:
 Rondonópolis e São José do Rio Preto saem mais caro e têm conexões bem longas — repare que a volta
@@ -701,6 +725,16 @@ também São Paulo e Rio: costuma compensar pegar um voo doméstico curto ou ôn
 sair de lá, tanto no preço quanto no tempo total de viagem.
 
 ═══════════════════════════════════════════════════════════
+HOSPEDAGEM PAGA PELOS NOIVOS — JANELA EXATA (vale para quem tem hospedagem coberta):
+A Larissa e o Robert cobrem da QUARTA 23/06 até o DOMINGO 27/06 — noites de quarta, quinta, sexta
+e sábado, com check-out no domingo 27. Isso encaixa com o voo saindo do Brasil na terça 22 e
+chegando na quarta 23.
+Quem quiser esticar a viagem (semana completa, voltando terça 29/30) paga as noites a partir de
+domingo por conta própria. Fale isso de forma leve e clara — é melhor a pessoa saber agora do que
+descobrir no hotel. Nunca deixe dúvida sobre até quando a hospedagem paga vai.
+Se a pessoa NÃO tem hospedagem coberta, não invente: hotel é por conta dela, e a Larissa e o Robert
+recomendam a região central perto da Piazza Venezia.
+
 PREÇOS DE VOO — REGRA PARA TODAS AS ROTAS:
 Sempre que citar preços de voo, deixe claro que foram pesquisados pela Larissa, que podem ter mudado
 desde então, e que a pessoa deve conferir antes de comprar. Você NÃO consegue consultar preços ao vivo —
