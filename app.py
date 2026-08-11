@@ -956,10 +956,45 @@ def get_aurora_response(phone_number, user_message):
     return assistant_message
 
 
+def admin_guest_lookup(message):
+    """Records for any guest NAMED in an admin's question.
+
+    The admin view only ever had aggregate stats, so a perfectly reasonable
+    question — "is Cian's accommodation covered?" — got "I don't have data for
+    that guest", which is useless when the answer is sitting in the sheet.
+    Admin messages are phone-gated, so attaching the full record is safe here
+    in a way it never would be on the guest side.
+    """
+    load_guest_directory()
+    low = " " + (message or "").lower() + " "
+    hits = []
+    for key, rec in GUEST_DIRECTORY.items():
+        full = str(rec.get("name", key)).split(" (")[0].strip()
+        if len(full) < 4:
+            continue
+        if full.lower() in low:
+            hits.append({
+                "name": rec.get("name"),
+                "accommodation_included": bool(rec.get("accommodation_included")),
+                "accommodation_confirmed": bool(rec.get("accommodation_confirmed")),
+                "bridal_party": bool(rec.get("bridal_party")),
+                "attending": rec.get("attending"),
+                "phone_on_file": bool(str(rec.get("phone") or "").strip()),
+                "party": PARTY_MAP.get(key, []),
+            })
+        if len(hits) >= 5:
+            break
+    return hits
+
+
 def get_admin_response(phone_number, user_message):
     norm = normalize_phone(phone_number)
     name = ADMIN_IDENTITY.get(norm, "Carlotta")
     stats = get_admin_stats()
+    matched = admin_guest_lookup(user_message)
+    if matched:
+        stats = dict(stats)
+        stats["convidados_mencionados"] = matched
     if phone_number not in admin_conversations:
         admin_conversations[phone_number] = []
     history = admin_conversations[phone_number]
