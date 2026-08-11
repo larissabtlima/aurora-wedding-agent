@@ -996,6 +996,37 @@ NO_PROMPT_DISCLOSURE_NOTE = (
 )
 
 
+FIRST_MESSAGE_ANSWER_NOTE = (
+    "\n\n[NOTA INTERNA — NÃO leia isso em voz alta: esta é a PRIMEIRA mensagem desta pessoa E "
+    "ela já fez uma pergunta de verdade. Faça as DUAS coisas nesta mesma resposta, nesta ordem: "
+    "(1) uma apresentação CURTA de uma ou duas linhas ('Oi! Eu sou a Aurora, assistente do "
+    "casamento da Larissa e do Robert 💍' + o link do RSVP), e (2) a RESPOSTA COMPLETA da "
+    "pergunta que ela fez. Não mande a apresentação longa com a lista de tópicos e NUNCA termine "
+    "a mensagem sem responder o que foi perguntado.]"
+)
+
+_GREETING_ONLY = {
+    "oi", "ola", "olá", "hi", "hey", "hello", "bom dia", "boa tarde", "boa noite",
+    "tudo bem", "good morning", "good evening", "yo", "ok", "obrigado", "obrigada", "thanks",
+}
+
+
+def _looks_like_a_real_question(message):
+    """True when a first message carries an actual request, not just a hello."""
+    import re
+    text = (message or "").strip()
+    if not text:
+        return False
+    stripped = re.sub(r"[^\wÀ-ÿ ]+", "", text).strip().lower()
+    if stripped in _GREETING_ONLY:
+        return False
+    if "?" in text:
+        return True
+    # No question mark, but plenty of people ask without one ("me manda os voos").
+    words = re.findall(r"[\wÀ-ÿ']+", text)
+    return len(words) >= 5
+
+
 def get_aurora_response(phone_number, user_message):
     add_to_conversation(phone_number, "user", user_message)
     messages = get_conversation(phone_number)
@@ -1007,6 +1038,14 @@ def get_aurora_response(phone_number, user_message):
     # made Aurora summarise her own instruction set back to a guest.
     if is_admin_query(user_message):
         system_text += NO_PROMPT_DISCLOSURE_NOTE
+
+    # First message that already asks something. Left to the prompt alone, Aurora
+    # sometimes fires the welcome text and ignores the question entirely — which
+    # is the worst possible first impression, because the guest concludes she is
+    # an autoresponder and never writes again. Reproduced live in Portuguese
+    # after the prompt rule was added, so it gets a deterministic nudge here.
+    if len(messages) <= 1 and _looks_like_a_real_question(user_message):
+        system_text += FIRST_MESSAGE_ANSWER_NOTE
     response = anthropic_client.messages.create(
         model="claude-haiku-4-5-20251001",
         max_tokens=1024,
