@@ -1094,9 +1094,26 @@
         const needsPassport = false; // Replaced by per-person passport cards
         const sameEvents = document.querySelector('input[name="sameEvents"]:checked') ? document.querySelector('input[name="sameEvents"]:checked').value === 'yes' : true;
         const sameDiet = document.querySelector('input[name="sameDiet"]:checked') ? document.querySelector('input[name="sameDiet"]:checked').value === 'yes' : true;
-        // When declining, only the primary guest is submitted, with everything cleared —
-        // no family/plus-one members, no days, no dietary flags, no elevator request.
-        const partyMembers = attendingVal === 'no' ? [primaryName] : getSelectedPartyMembers();
+        // A decline covers the WHOLE household, not just the person filling it in.
+        // Previously only the primary was marked as not attending and everyone
+        // linked to them was left blank, so a family that had clearly said no
+        // still counted as "waiting for a reply" — and would have been chased.
+        // Everything is still cleared: no days, no dietary flags, no elevator.
+        // If one person in the household does want to come, they can open the
+        // form under their own name and accept; that overwrites their own row.
+        let partyMembers;
+        if (attendingVal === 'no') {
+          partyMembers = [primaryName];
+          document.querySelectorAll('.fam-checkbox').forEach(cb => {
+            if (cb.value && !partyMembers.includes(cb.value)) partyMembers.push(cb.value);
+          });
+          const primaryRecord = guestList.find(g => g.name === primaryName);
+          if (primaryRecord && primaryRecord.hasPlusOneSlot) {
+            partyMembers.push("Guest (" + primaryName + ")");
+          }
+        } else {
+          partyMembers = getSelectedPartyMembers();
+        }
         // Figure out which single entry in partyMembers (if any) IS the plus-one,
         // so we know which submission needs to update the "Guest (Primary Name)"
         // placeholder row instead of trying to find a row under a brand-new name.
