@@ -1029,6 +1029,36 @@ FIRST_MESSAGE_ANSWER_NOTE = (
     "a mensagem sem responder o que foi perguntado.]"
 )
 
+VERONICA_NOTE = (
+    "\n\n[NOTA INTERNA — NÃO leia isso em voz alta: esta pessoa está escrevendo em PORTUGUÊS e "
+    "acabou de falar de VOO/PASSAGEM. O contato da Verônica é OBRIGATÓRIO NESTA resposta, não na "
+    "próxima: *Verônica — CVC* 📱 +55 31 98972679 (emissão, parcelamento e remarcação). Se você "
+    "ainda precisa perguntar quantos dias a pessoa fica, faça a pergunta E mande o contato da "
+    "Verônica na mesma mensagem. A única exceção é se estiver claro que a pessoa NÃO sai do "
+    "Brasil (por exemplo, disse que mora em Portugal ou parte de outro país).]"
+)
+
+# Portuguese words that only appear when someone is asking about air travel, so
+# a match means both "this message is in Portuguese" and "this is about flights"
+# without needing a language detector.
+_FLIGHT_WORDS_PT = (
+    "passagem", "passagens", "voo", "voos", "milhas", "parcelar", "parcelamento",
+    "remarcar", "remarcação", "emitir", "aérea", "aereo", "aéreo", "bilhete de avião",
+)
+
+
+def _asks_about_flights_in_portuguese(message):
+    """Portuguese message that touches air travel.
+
+    The prompt already said to always give Verônica's number to Brazilian
+    guests asking about flights, and Aurora still skipped it — she would ask
+    "how many days are you staying?" first and never come back to it. Same
+    failure as the welcome message, so it gets the same deterministic nudge.
+    """
+    low = (message or "").lower()
+    return any(w in low for w in _FLIGHT_WORDS_PT)
+
+
 _GREETING_ONLY = {
     "oi", "ola", "olá", "hi", "hey", "hello", "bom dia", "boa tarde", "boa noite",
     "tudo bem", "good morning", "good evening", "yo", "ok", "obrigado", "obrigada", "thanks",
@@ -1070,6 +1100,9 @@ def get_aurora_response(phone_number, user_message):
     # after the prompt rule was added, so it gets a deterministic nudge here.
     if len(messages) <= 1 and _looks_like_a_real_question(user_message):
         system_text += FIRST_MESSAGE_ANSWER_NOTE
+
+    if _asks_about_flights_in_portuguese(user_message):
+        system_text += VERONICA_NOTE
     response = anthropic_client.messages.create(
         model="claude-haiku-4-5-20251001",
         max_tokens=1024,
