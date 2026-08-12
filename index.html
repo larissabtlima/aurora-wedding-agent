@@ -564,6 +564,8 @@
         btnSubmit: "Submit RSVP",
         txtSuccessTitle: "RSVP Confirmed!",
         txtSuccessDesc: "We can't wait to celebrate with you in Rome! Need assistance with flights or hotel recommendations?",
+        txtDeclineTitle: "RSVP Received",
+        txtDeclineDesc: "Thank you for letting us know. We're sorry you can't join us — you'll be missed, and we'll raise a glass to you in Rome. If anything changes, just speak to Larissa & Robert. 💕",
         waText: "💬 Chat with Aurora on WhatsApp",
         guestSearchPlaceholder: "Start typing your name…",
         guestNameError: "Please select your name from the list.",
@@ -613,6 +615,8 @@
         btnSubmit: "Confirmar Presença",
         txtSuccessTitle: "Presença Confirmada!",
         txtSuccessDesc: "Estamos muito felizes em comemorar com você em Roma! Precisa de ajuda com voos ou hospedagem?",
+        txtDeclineTitle: "Resposta Recebida",
+        txtDeclineDesc: "Obrigada por avisar! Que pena que você não vai poder ir — vamos sentir sua falta e brindar a você em Roma. Se mudar alguma coisa, é só falar com a Larissa e o Robert. 💕",
         waText: "💬 Falar com a Aurora no WhatsApp",
         guestSearchPlaceholder: "Comece a digitar seu nome…",
         guestNameError: "Por favor selecione seu nome na lista.",
@@ -631,6 +635,20 @@
     // typed early gets their results without touching anything.
     const GUEST_CACHE_KEY = 'auroraGuestListV1';
     let guestListReady = false;
+    let declinedRsvp = false;
+
+    // Kept in one place because setLanguage rewrites every element by id from
+    // the translations table — without this, switching language on the
+    // thank-you screen would put the acceptance wording back.
+    function applySuccessScreenWording() {
+      const t = translations[currentLang];
+      const title = document.getElementById('txtSuccessTitle');
+      const desc = document.getElementById('txtSuccessDesc');
+      if (title) title.innerHTML = declinedRsvp ? t.txtDeclineTitle : t.txtSuccessTitle;
+      if (desc) desc.innerHTML = declinedRsvp ? t.txtDeclineDesc : t.txtSuccessDesc;
+      const waBox = document.querySelector('#successScreen .wa-banner-box');
+      if (waBox) waBox.style.display = declinedRsvp ? 'none' : '';
+    }
 
     function refreshSuggestionsAfterLoad() {
       const input = document.getElementById('guestSearchInput');
@@ -781,6 +799,8 @@
         const span = cb.parentElement.querySelector('span');
         if (span) span.textContent = t.txtAlsoRsvpFor + ' ' + cb.value;
       });
+
+      applySuccessScreenWording();
 
       if (lang === 'pt') buildPassportPersonCards();
     }
@@ -1202,6 +1222,12 @@
           }
         }
         if (lastErr) throw lastErr;
+        // Someone who just declined was still being told "we can't wait to
+        // celebrate with you in Rome!" — a thank-you written for acceptances
+        // only. Declines get their own wording, and the trip-planning banner
+        // is hidden because there's no trip to plan.
+        declinedRsvp = (attendingVal === 'no');
+        applySuccessScreenWording();
         document.getElementById('rsvpFormContainer').style.display = 'none';
         document.getElementById('successScreen').style.display = 'block';
       } catch (err) {
