@@ -7,10 +7,10 @@
 # those seconds is spent waiting on the Anthropic API, not on CPU, so threads
 # fix it without needing a bigger instance.
 #
-# One worker, several threads: the app keeps its state (conversations, phone
-# bindings) in module-level dicts, which are shared inside a process but NOT
-# across processes. Adding workers instead of threads would split that state
-# and make Aurora forget people at random. Threads keep one shared copy.
+# One worker, several threads: live conversation state sits in memory in this
+# process and is mirrored to SQLite on the persistent disk. Threads share that
+# one copy. Extra worker processes would not, and Aurora would forget people
+# at random. Threads keep one shared copy.
 
 workers = 1
 threads = 8
