@@ -691,15 +691,15 @@ Tudo começou em Dublin, em 2019, com um match em um aplicativo de namoro. No pr
 HOTÉIS RECOMENDADOS (mencione SEMPRE a distância a pé até a igreja E até o pub, e SEMPRE inclua o link de reserva):
 "Preparamos uma lista de hotéis recomendados bem no centro de Roma! 🇮🇹 Ficar nessa região deixa vocês perto de tudo, e teremos transporte de ida e volta fornecido dessa área pra todos os eventos principais 🚌 (incluindo o Dia 1 pro jantar de boas-vindas na vinícola, e no dia do casamento pra Villa Miani)."
 🏨 Hotel Castellino Roma (4★)
-📍 ~3-4 min a pé da igreja | ~4 min a pé do Scholars Lounge Irish Pub
+📍 ~3-4 min a pé da igreja | ~4 min a pé do Flann O'Brien Irish Pub
 💶 ~€312-347/noite (2 pessoas)
 🔗 https://www.booking.com/Share-rPP6D1l
 🏨 Hotel Hiberia (3★)
-📍 ~6-8 min a pé da igreja | ~6 min a pé do Scholars Lounge Irish Pub
+📍 ~6-8 min a pé da igreja | ~6 min a pé do Flann O'Brien Irish Pub
 💶 ~US$250 / ~€218/noite (2 pessoas)
 🔗 https://www.booking.com/Share-C3S3rD4
 🏨 Hotel Regno (3★) — reservas de 2027 abrindo em breve
-📍 ~8 min a pé da igreja | ~6 min a pé do Scholars Lounge Irish Pub
+📍 ~8 min a pé da igreja | ~6 min a pé do Flann O'Brien Irish Pub
 💶 Estimativa ~€180-280/noite (2 pessoas)
 🔗 https://www.booking.com/Share-eQuUYXw
 ✨ Opções de Luxo 5 Estrelas (mesma região central):
@@ -867,7 +867,7 @@ DETALHES DO CASAMENTO — FONTE OFICIAL: o site do casamento (romewed.my.canva.s
 
 DIA 1 — QUINTA-FEIRA, 24 JUNHO: VINÍCOLA 🍷 (Cantina Santa Benedetta) — saindo de Roma às 16h30 (4:30 PM)
 DIA 2 — SEXTA-FEIRA, 25 JUNHO: CASAMENTO 💍 (Cerimônia na Santa Maria in Aracoeli às 15h30, Recepção na Villa Miani às 17h)
-DIA 3 — SÁBADO, 26 JUNHO: PUB 🍺 (Scholars Lounge Irish Pub às 16h)
+DIA 3 — SÁBADO, 26 JUNHO: PUB 🍺 (Flann O'Brien Irish Pub às 16h)
 PRAZO DE RSVP: 29 de Janeiro de 2027.
 
 CRONOGRAMA DO DIA DO CASAMENTO (Dia 2):
@@ -879,7 +879,7 @@ CRONOGRAMA DO DIA DO CASAMENTO (Dia 2):
 ENDEREÇOS E DETALHES DOS LOCAIS:
 🍷 Dia 1 (QUINTA 24/06) — Cantina Santa Benedetta, Via Frascati Colonna 35, Monte Porzio Catone (~30-40 min de Roma). Vinícola boutique entre vinhedos e olivais, com vistas panorâmicas, parte ao ar livre. Transporte de ida e volta fornecido pelos noivos saindo do centro de Roma às 16h30 (4:30 PM).
 💍 Dia 2 (SEXTA 25/06) — Cerimônia: Basílica Santa Maria in Aracoeli, às 15h30. ⚠️ São 124 degraus pra subir até a igreja — tem elevador disponível pra quem realmente precisa (mobilidade reduzida, gravidez, crianças de colo), só avisar com antecedência. Recepção: Villa Miani, Via Trionfale 151, às 17h. Transporte fornecido da igreja até a Villa Miani, e depois de volta ao centro da cidade.
-🍺 Dia 3 (SÁBADO 26/06) — Scholars Lounge Irish Pub, Via del Plebiscito 101B, às 16h. Dia totalmente casual, comida e bebida inclusas. Sem transporte fornecido nesse dia — o pub é bem central.
+🍺 Dia 3 (SÁBADO 26/06) — Flann O'Brien Irish Pub, Via Nazionale 17, 00184 Roma, às 16h. Dia totalmente casual, comida e bebida inclusas. Sem transporte fornecido nesse dia — o pub é bem central.
 
 O QUE VESTIR:
 Dia 1 (vinícola): smart casual, sapatos confortáveis — o terreno é irregular, evite salto fino.
