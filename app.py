@@ -38,9 +38,9 @@ anthropic_client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
 # 7. Guest-facing Aurora can now answer "am I on the list", "is my
 #    accommodation covered", "who's in my RSVP party" — scoped strictly to
 #    the person she's talking to, using the new directory endpoint.
-# 8. /zapi only trusts a request when ZAPI_WEBHOOK_SECRET matches. If that
-#    env var is unset, guest messages still work (a warning is logged) but
-#    admin actions are refused, because the phone in the body can be forged.
+# 8. Admin actions ([ALL], [BRIDAL], [admin]) run only when ZAPI_WEBHOOK_SECRET
+#    matches the webhook token. Guest messages are always answered, including
+#    when the secret is unset or the token is missing. A warning is logged.
 # 9. A message that is clearly for Larissa personally, not about the wedding,
 #    gets a short reply in the sender's language with her current number.
 # 10. Conversations and guest bindings persist in SQLite on the disk at
@@ -174,17 +174,29 @@ def _load_from_db(conn):
             admin_conversations[phone] = msgs[-20:]
 
 
+# Set when the disk cannot be used. Replies keep using the in-memory copies.
+_persistence_disabled = False
+
+
 def save_state():
+    global _persistence_disabled
+    if _persistence_disabled:
+        return
     with _save_lock:
         try:
             _persist_memory_locked()
         except Exception as e:
+            _persistence_disabled = True
             import sys
-            print(f"SAVE STATE ERROR: {str(e)}", file=sys.stderr)
+            print(
+                f"SAVE STATE ERROR: {e}. SQLite is unavailable, so this process "
+                "will keep replying from memory only.",
+                file=sys.stderr,
+            )
 
 
 def load_state():
-    global conversations, admin_conversations, phone_registry, all_phones
+    global conversations, admin_conversations, phone_registry, all_phones, _persistence_disabled
     try:
         conn = _get_db()
         counts = [
@@ -216,8 +228,13 @@ def load_state():
         import sys
         print("LOADED STATE: no existing memory, starting fresh", file=sys.stderr)
     except Exception as e:
+        _persistence_disabled = True
         import sys
-        print(f"LOAD STATE ERROR: {str(e)}", file=sys.stderr)
+        print(
+            f"LOAD STATE ERROR: {e}. Starting from in-memory history only. "
+            "Aurora will keep replying.",
+            file=sys.stderr,
+        )
 
 
 ADMIN_NUMBERS = {"+16463390886", "+19292277546", "+393490541017"}
@@ -323,7 +340,8 @@ def _startup_webhook_warning():
     import sys
     print(
         "Z-API WEBHOOK WARNING: ZAPI_WEBHOOK_SECRET is not set. "
-        "Guest messages are still accepted so the concierge keeps working. "
+        "Guest messages are still accepted so the concierge keeps working, "
+        "even if a later request arrives without the token. "
         "Admin actions ([ALL], [BRIDAL], [admin]) are blocked until the secret "
         "is set, because the phone number in the webhook body can be forged. "
         "Set ZAPI_WEBHOOK_SECRET and point the Z-API 'on receive' webhook at "
@@ -1550,17 +1568,22 @@ def _token_matches(provided, expected):
     return hmac.compare_digest(a, b)
 
 
+_token_mismatch_warned = False
+
+
 def zapi_webhook_auth(path_token=None):
-    """Return 'ok', 'guest-only', or 'reject'.
+    """Return 'ok' or 'guest-only'. Never a reason to drop a guest reply.
 
     Z-API does not sign inbound webhooks and does not send Client-Token on
     them (that header authenticates Aurora's outbound API calls only). The
     shared secret travels in the webhook URL: /zapi?token=... or /zapi/<token>.
     A Client-Token header equal to ZAPI_WEBHOOK_SECRET is also accepted.
 
-    When the env var is unset this returns 'guest-only': ordinary messages
-    still get a reply, admin actions do not.
+    'ok' means admin commands may run. 'guest-only' means a normal message is
+    still answered, and [ALL] / [BRIDAL] / [admin] are refused. That is also
+    the result when the secret is set but this request did not present it.
     """
+    global _token_mismatch_warned
     secret = os.environ.get("ZAPI_WEBHOOK_SECRET", "").strip()
     if not secret:
         return "guest-only"
@@ -1573,7 +1596,17 @@ def zapi_webhook_auth(path_token=None):
         or _token_matches(provided_path, secret)
     ):
         return "ok"
-    return "reject"
+    if not _token_mismatch_warned:
+        _token_mismatch_warned = True
+        import sys
+        print(
+            "Z-API WEBHOOK WARNING: ZAPI_WEBHOOK_SECRET is set but this request "
+            "did not include the matching token. Guest messages are still being "
+            "answered. Admin commands stay blocked until the webhook URL includes "
+            "?token= that same secret.",
+            file=sys.stderr,
+        )
+    return "guest-only"
 
 
 def message_requests_admin_action(message):
@@ -1589,10 +1622,6 @@ def message_requests_admin_action(message):
 def zapi_webhook(token=None):
     try:
         auth = zapi_webhook_auth(token)
-        if auth == "reject":
-            import sys
-            print("Z-API: rejected webhook, missing or wrong token", file=sys.stderr)
-            return Response("", status=401)
         data = request.get_json(force=True) or {}
         if data.get('fromMe', False):
             return Response('', status=200)

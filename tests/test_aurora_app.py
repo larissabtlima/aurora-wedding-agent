@@ -219,15 +219,29 @@ def test_webhook_auth_and_admin_block(monkeypatch):
     assert len(guest_calls) == before + 1
     assert broadcasts == []
 
-    # Secret set: missing or wrong token is rejected and does nothing.
+    # Secret set, but the URL has no token yet: guests still get a reply.
+    # Admin commands stay blocked. Nothing is rejected with 401.
     monkeypatch.setenv("ZAPI_WEBHOOK_SECRET", "test-secret-value")
-    rejected = client.post("/zapi", json={"phone": admin_phone, "text": {"message": "[ALL] hello everyone"}})
-    assert rejected.status_code == 401
+    app._token_mismatch_warned = False
+    missing = client.post("/zapi", json={"phone": admin_phone, "text": {"message": "[ALL] hello everyone"}})
+    assert missing.status_code == 200
     assert broadcasts == []
 
     wrong = client.post("/zapi?token=nope", json={"phone": admin_phone, "text": {"message": "[ALL] hello everyone"}})
-    assert wrong.status_code == 401
+    assert wrong.status_code == 200
     assert broadcasts == []
+
+    guest_before = len(guest_calls)
+    missing_guest = client.post("/zapi", json={"phone": guest_phone, "text": {"message": "where is the church?"}})
+    assert missing_guest.status_code == 200
+    assert len(guest_calls) == guest_before + 1
+    assert guest_calls[-1][1] == "where is the church?"
+    wrong_guest = client.post(
+        "/zapi?token=nope",
+        json={"phone": guest_phone, "text": {"message": "what should I wear?"}},
+    )
+    assert wrong_guest.status_code == 200
+    assert guest_calls[-1][1] == "what should I wear?"
 
     # Right token via query, path, or header: the broadcast is allowed.
     ok_query = client.post(
@@ -252,15 +266,52 @@ def test_webhook_auth_and_admin_block(monkeypatch):
     assert ok_header.status_code == 200
     assert len(admin_calls) == 1
 
-    # Guests also need the token once it is set, and then behave as before.
-    blocked_guest = client.post("/zapi", json={"phone": guest_phone, "text": {"message": "dress code?"}})
-    assert blocked_guest.status_code == 401
+    # A correct token still lets a normal guest message through, same as before.
     allowed_guest = client.post(
         "/zapi?token=test-secret-value",
         json={"phone": guest_phone, "text": {"message": "dress code?"}},
     )
     assert allowed_guest.status_code == 200
     assert guest_calls[-1][1] == "dress code?"
+
+
+def test_sqlite_failure_still_replies(monkeypatch):
+    app._persistence_disabled = False
+
+    def explode():
+        raise OSError("disk gone")
+
+    monkeypatch.setattr(app, "_persist_memory_locked", explode)
+    app.save_state()
+    assert app._persistence_disabled is True
+
+    def create(**kwargs):
+        return _Resp("The ceremony is at 3:30 PM.")
+
+    monkeypatch.setattr(app.anthropic_client.messages, "create", create)
+    try:
+        reply = app.get_aurora_response("353830000111", "What time is the ceremony?")
+        assert "3:30" in reply
+        # A second save must not raise after the disk has been given up.
+        app.save_state()
+    finally:
+        app._persistence_disabled = False
+
+
+def test_load_failure_still_serves_health(monkeypatch):
+    app._persistence_disabled = False
+
+    def boom():
+        raise OSError("no disk")
+
+    monkeypatch.setattr(app, "_get_db", boom)
+    try:
+        app.load_state()
+        assert app._persistence_disabled is True
+        rv = app.app.test_client().get("/health")
+        assert rv.status_code == 200
+    finally:
+        app._persistence_disabled = False
 
 
 def test_token_compare_does_not_throw_on_different_lengths():
