@@ -23,9 +23,26 @@
 //    guest actually selected, instead of being blindly set TRUE for all 3 days on
 //    every submission.
 //
+// CHANGES IN v6:
+// 1. The directory secret is read from Script Properties (key DIRECTORY_SECRET).
+//    Nothing secret is stored in this file. The old hardcoded value is compromised
+//    and must be rotated by the owner.
+// 2. Guest-row matching no longer uses loose substring search, which could write
+//    one person's RSVP onto a "Guest (X)" plus-one row or onto a similar name,
+//    including the guest's own row. A household-wide "no" is unchanged: the form
+//    still names every row it intends to update, and those exact rows are written.
+// 3. A resubmitted phone number replaces the number already in the sheet.
+// 4. Every real RSVP change is appended to an "RSVP History" tab (created
+//    automatically). Identical resubmissions add no rows.
+//
 // Passport data goes into a separate "Passaportes" sheet tab.
 
-var DIRECTORY_SECRET = "dda510d6-f20e-452b-b528-44c66d03eab84b81a658-f227-447b-9b4a-318daf548ee6";
+// Directory secret: Apps Script → Project Settings → Script properties,
+// property name DIRECTORY_SECRET. Same value as GUEST_DIRECTORY_SECRET on Render.
+function getDirectorySecret() {
+  var secret = PropertiesService.getScriptProperties().getProperty("DIRECTORY_SECRET");
+  return secret ? String(secret).trim() : "";
+}
 
 function normalizeName(raw) {
   return raw.toString().replace(/\s+/g, ' ').trim();
@@ -196,7 +213,8 @@ function handlePublicGuestList() {
 // data so Aurora can answer a guest about themselves, and so admin stats are
 // computed live instead of from data Aurora never actually stores.
 function handleDirectoryRequest(params) {
-  if (!DIRECTORY_SECRET || params.secret !== DIRECTORY_SECRET) {
+  var directorySecret = getDirectorySecret();
+  if (!directorySecret || params.secret !== directorySecret) {
     return ContentService
       .createTextOutput(JSON.stringify({ error: "unauthorized" }))
       .setMimeType(ContentService.MimeType.JSON);
@@ -376,43 +394,228 @@ function findGuestRow(sheet, name) {
   return findGuestRowIn(sheet.getRange("B27:B" + sheet.getLastRow()).getValues(), name);
 }
 
+// "Larissa Lima (Robert Daly)" → outside name + household anchor.
+// A vacant plus-one is "Guest (Corey Brennan)": outside name "guest".
+function splitGuestName(normalizedLower) {
+  var m = normalizedLower.match(/^(.+?)\s*\(([^()]*)\)\s*$/);
+  if (!m) return { base: normalizedLower, anchor: "" };
+  return { base: m[1].trim(), anchor: m[2].trim() };
+}
+
+function isPlaceholderGuestName(name) {
+  var norm = normalizeName(name).toLowerCase();
+  return splitGuestName(norm).base === "guest";
+}
+
+// Same person, not merely a similar string.
+// "Jane Doe" and "Jane Doe (Corey Brennan)" are the same row (the plus-one
+// after it has been given a real name). "Jane Doe (Alice)" and
+// "Jane Doe (Bob)" are not. "Guest (Corey Brennan)" is never Corey Brennan.
+// "Maria" is not "Maria Silva".
+function namesReferToSameGuest(searchName, cellName) {
+  if (!searchName || !cellName) return false;
+  if (searchName === cellName) return true;
+  var s = splitGuestName(searchName);
+  var c = splitGuestName(cellName);
+  if (c.base === "guest" || s.base === "guest") return false;
+  if (c.base !== s.base) return false;
+  if (c.anchor && s.anchor && c.anchor !== s.anchor) return false;
+  return true;
+}
+
 // Same matching logic, but against an already-fetched name column so a batch
 // of party members can share one read instead of one read each.
+//
+// Returns a sheet row number (data starts at row 27), or -1.
+// A missing row is recoverable; a write to the wrong person is not, so this
+// never guesses. Substring matching used to do exactly that:
+//   • "Guest (Corey Brennan)" contains "Corey Brennan", so a plus-one
+//     confirmation overwrote Corey's own RSVP.
+//   • "Corey Brennan" is contained in "Guest (Corey Brennan)", so Corey's
+//     RSVP could land on his vacant plus-one row.
+//   • "Maria" matched "Maria Silva" when that was the only substring hit.
 function findGuestRowIn(nameCol, name) {
   var searchName = normalizeName(name).toLowerCase();
+  if (!searchName) return -1;
 
-  // PASS 1 — exact match only. This has to run first and fully, over every
-  // row, before any fuzzy fallback. Real bug found in testing: searching for
-  // "Guest (Corey Brennan)" would match Corey Brennan's OWN row first under
-  // the old single-pass fuzzy logic, because "Corey Brennan" is a substring
-  // of "Guest (Corey Brennan)" — so confirming his plus-one silently
-  // overwrote his own name in column B instead of the placeholder row.
   for (var i = 0; i < nameCol.length; i++) {
     var cellName = normalizeName(nameCol[i][0].toString()).toLowerCase();
-    if (cellName === searchName) {
-      return i + 27;
-    }
+    if (cellName === searchName) return i + 27;
   }
 
-  // PASS 2 — fuzzy fallback (substring match), only used for free-text
-  // lookups (e.g. passport submissions, admin tools) where an exact match
-  // isn't guaranteed. Never used for placeholder_target lookups in practice
-  // since those are always exact strings the form generated itself.
-  //
-  // IMPORTANT: the fuzzy pass now only returns a row when there is exactly ONE
-  // candidate. If two or more rows could match, we return -1 and write nothing,
-  // rather than guessing and saving someone's RSVP onto a different guest's
-  // row. A missing write is recoverable; a write to the wrong person is not.
-  var fuzzyMatches = [];
-  for (var i = 0; i < nameCol.length; i++) {
-    var cellName = normalizeName(nameCol[i][0].toString()).toLowerCase();
-    if (!cellName) continue;
-    if (cellName.indexOf(searchName) !== -1 || searchName.indexOf(cellName) !== -1) {
-      fuzzyMatches.push(i + 27);
-    }
+  // Placeholder lookups have to be exact. There is no safe fuzzy version:
+  // anything looser matches the anchor guest's own row.
+  if (isPlaceholderGuestName(searchName)) return -1;
+
+  var matches = [];
+  for (var j = 0; j < nameCol.length; j++) {
+    var cell = normalizeName(nameCol[j][0].toString()).toLowerCase();
+    if (!cell || isPlaceholderGuestName(cell)) continue;
+    if (namesReferToSameGuest(searchName, cell)) matches.push(j + 27);
   }
-  if (fuzzyMatches.length === 1) return fuzzyMatches[0];
+  if (matches.length === 1) return matches[0];
   return -1;
+}
+
+// Throws instead of writing when the matched row cannot be the person we
+// looked up. Defense in depth behind findGuestRowIn.
+function assertSafeGuestWrite(rowName, lookupName) {
+  var rowNorm = normalizeName(rowName).toLowerCase();
+  var lookNorm = normalizeName(lookupName).toLowerCase();
+  if (isPlaceholderGuestName(rowNorm) && !isPlaceholderGuestName(lookNorm)) {
+    throw new Error("Refusing to write \"" + lookupName + "\" onto plus-one row \"" + rowName + "\"");
+  }
+  if (isPlaceholderGuestName(lookNorm) && rowNorm !== lookNorm) {
+    throw new Error("Refusing to write placeholder \"" + lookupName + "\" onto \"" + rowName + "\"");
+  }
+}
+
+function phoneDigits(v) {
+  return String(v == null ? "" : v).replace(/\D/g, "");
+}
+
+// True when the form sent a phone number that should replace the cell.
+// An empty submission never clears a number. The same digits in a different
+// format ("087 123 4567" vs "0871234567") are the same number and are left as-is.
+function incomingPhoneReplaces(oldVal, newVal) {
+  var incoming = String(newVal == null ? "" : newVal).trim();
+  if (!incoming) return false;
+  var current = String(oldVal == null ? "" : oldVal).trim();
+  if (!current) return true;
+  var oldDigits = phoneDigits(current);
+  var newDigits = phoneDigits(incoming);
+  if (oldDigits && newDigits && oldDigits === newDigits) return false;
+  return current !== incoming;
+}
+
+function boolLog(v) {
+  return (v === true || v === "TRUE" || v === "true" || v === 1) ? "TRUE" : "FALSE";
+}
+
+function textLog(v) {
+  if (v == null) return "";
+  return String(v).replace(/\s+/g, " ").trim();
+}
+
+var RSVP_TRACKED_FIELDS = [
+  "name", "phone", "invitation_sent", "attending", "not_attending",
+  "dietary_vegetarian", "dietary_vegan", "dietary_nut_allergy",
+  "dietary_no_beef", "dietary_no_pork", "dietary_shellfish",
+  "day1_invited", "day1_attending", "day2_invited", "day2_attending",
+  "day3_invited", "day3_attending", "needs_elevator"
+];
+
+function diffFields(before, after, fields) {
+  var changes = [];
+  for (var i = 0; i < fields.length; i++) {
+    var f = fields[i];
+    var o = before[f] == null ? "" : String(before[f]);
+    var n = after[f] == null ? "" : String(after[f]);
+    if (o !== n) changes.push({ field: f, oldValue: o, newValue: n });
+  }
+  return changes;
+}
+
+// Append-only audit of RSVP writes. One row per field that actually changed.
+// The daily change-check reads this tab, so the columns stay stable and
+// machine-readable. Identical resubmissions add nothing.
+var HISTORY_SHEET = "RSVP History";
+var HISTORY_HEADERS = ["Timestamp", "Sheet Row", "Guest Name", "Field", "Old Value", "New Value", "Source"];
+
+function appendRsvpHistory(guestsSheet, row, guestName, changes, source) {
+  if (!changes || !changes.length) return;
+  var ss = guestsSheet.getParent();
+  var lock = LockService.getScriptLock();
+  var locked = false;
+  try {
+    lock.waitLock(15000);
+    locked = true;
+  } catch (lockErr) {
+    // Still append. A lost audit row is worse than a rare collision, and the
+    // guest's RSVP has already been written.
+  }
+  try {
+    var history = ss.getSheetByName(HISTORY_SHEET);
+    if (!history) history = ss.insertSheet(HISTORY_SHEET);
+    if (history.getLastRow() === 0) {
+      history.getRange(1, 1, 1, HISTORY_HEADERS.length).setValues([HISTORY_HEADERS]);
+      history.getRange(1, 1, 1, HISTORY_HEADERS.length).setFontWeight("bold");
+      history.setFrozenRows(1);
+    }
+    var stamp = Utilities.formatDate(new Date(), "UTC", "yyyy-MM-dd'T'HH:mm:ss'Z'");
+    var rows = [];
+    for (var i = 0; i < changes.length; i++) {
+      var c = changes[i];
+      rows.push([stamp, row, guestName, c.field, c.oldValue, c.newValue, source]);
+    }
+    // getLastRow() can still report 0 in the same turn the header was written.
+    // Never append on top of the header row.
+    var start = Math.max(history.getLastRow(), 1) + 1;
+    history.getRange(start, 1, rows.length, HISTORY_HEADERS.length).setValues(rows);
+  } finally {
+    if (locked) {
+      try { lock.releaseLock(); } catch (ignore) {}
+    }
+  }
+}
+
+// Columns B, G, J–R, T–Y, plus the elevator column, in one read.
+function readGuestRsvpState(sheet, row, elevatorCol) {
+  var lastCol = Math.max(elevatorCol || 25, 25);
+  var width = lastCol - 2 + 1;
+  var vals = sheet.getRange(row, 2, 1, width).getValues()[0];
+  function col(n) { return vals[n - 2]; }
+  var name = textLog(normalizeName(col(2).toString()));
+  var phoneRaw = col(7);
+  return {
+    phoneRaw: phoneRaw,
+    state: {
+      name: name,
+      phone: textLog(phoneRaw),
+      invitation_sent: boolLog(col(10)),
+      attending: boolLog(col(11)),
+      not_attending: boolLog(col(12)),
+      dietary_vegetarian: boolLog(col(13)),
+      dietary_vegan: boolLog(col(14)),
+      dietary_nut_allergy: boolLog(col(15)),
+      dietary_no_beef: boolLog(col(16)),
+      dietary_no_pork: boolLog(col(17)),
+      dietary_shellfish: boolLog(col(18)),
+      day1_invited: boolLog(col(20)),
+      day1_attending: boolLog(col(21)),
+      day2_invited: boolLog(col(22)),
+      day2_attending: boolLog(col(23)),
+      day3_invited: boolLog(col(24)),
+      day3_attending: boolLog(col(25)),
+      needs_elevator: boolLog(col(elevatorCol))
+    }
+  };
+}
+
+function stateAfterRsvp(payload, writtenName, phoneStored) {
+  var days = payload.days || [];
+  var attendingYes = payload.attending === "yes";
+  var attendingNo = payload.attending === "no";
+  return {
+    name: textLog(writtenName),
+    phone: textLog(phoneStored),
+    invitation_sent: "TRUE",
+    attending: attendingYes ? "TRUE" : "FALSE",
+    not_attending: attendingNo ? "TRUE" : "FALSE",
+    dietary_vegetarian: payload.dietary_vegetarian === true ? "TRUE" : "FALSE",
+    dietary_vegan: payload.dietary_vegan === true ? "TRUE" : "FALSE",
+    dietary_nut_allergy: payload.dietary_nut_allergy === true ? "TRUE" : "FALSE",
+    dietary_no_beef: payload.dietary_no_beef === true ? "TRUE" : "FALSE",
+    dietary_no_pork: payload.dietary_no_pork === true ? "TRUE" : "FALSE",
+    dietary_shellfish: payload.dietary_shellfish === true ? "TRUE" : "FALSE",
+    day1_invited: "TRUE",
+    day1_attending: days.indexOf("day1") !== -1 ? "TRUE" : "FALSE",
+    day2_invited: "TRUE",
+    day2_attending: days.indexOf("day2") !== -1 ? "TRUE" : "FALSE",
+    day3_invited: "TRUE",
+    day3_attending: days.indexOf("day3") !== -1 ? "TRUE" : "FALSE",
+    needs_elevator: payload.needs_elevator === true ? "TRUE" : "FALSE"
+  };
 }
 
 function updateGuestPhone(payload) {
@@ -421,9 +624,28 @@ function updateGuestPhone(payload) {
   if (!sheet) return;
   var row = findGuestRow(sheet, payload.name);
   if (row === -1) return;
+  var currentName = normalizeName(sheet.getRange(row, 2).getValue().toString());
+  assertSafeGuestWrite(currentName, payload.name);
   var phoneCell = sheet.getRange(row, 7);
-  if (!phoneCell.getValue()) phoneCell.setValue(payload.phone);
-  sheet.getRange(row, 10).setValue(true);
+  var oldPhone = phoneCell.getValue();
+  var inviteCell = sheet.getRange(row, 10);
+  var oldInvite = inviteCell.getValue();
+  var storedPhone = oldPhone;
+  if (incomingPhoneReplaces(oldPhone, payload.phone)) {
+    storedPhone = String(payload.phone).trim();
+    phoneCell.setValue(storedPhone);
+  }
+  inviteCell.setValue(true);
+  try {
+    var changes = diffFields(
+      { phone: textLog(oldPhone), invitation_sent: boolLog(oldInvite) },
+      { phone: textLog(storedPhone), invitation_sent: "TRUE" },
+      ["phone", "invitation_sent"]
+    );
+    appendRsvpHistory(sheet, row, currentName || payload.name, changes, "phone");
+  } catch (histErr) {
+    console.error("RSVP history log failed: " + histErr);
+  }
 }
 
 // Shared per-execution context. Reading the name column and locating the
@@ -458,23 +680,32 @@ function updateGuestRSVP(payload, ctx) {
   var row = findGuestRowIn(ctx.nameCol, lookupName);
   if (row === -1) throw new Error("Guest not found in sheet: " + lookupName);
 
+  var currentName = normalizeName(ctx.nameCol[row - 27][0].toString());
+  assertSafeGuestWrite(currentName, lookupName);
+  var before = readGuestRsvpState(sheet, row, ctx.elevatorCol);
+
   // If a real name was given for what used to be "Guest (Primary Name)",
   // rename the cell so the live list shows "Actual Name (Primary Name)"
   // from now on, instead of staying stuck as a generic "Guest (...)" slot.
+  var writtenName = currentName;
   if (payload.placeholder_target && payload.name !== payload.placeholder_target) {
     var parenMatch = payload.placeholder_target.match(/\(([^()]+)\)\s*$/);
     var suffix = parenMatch ? " (" + parenMatch[1] + ")" : "";
     var newName = payload.name + suffix;
+    writtenName = newName;
     sheet.getRange(row, 2).setValue(newName);
     // Keep the cached name column in step, so later members of the SAME batch
     // don't look this row up under its old "Guest (...)" name.
     ctx.nameCol[row - 27][0] = newName;
   }
 
-  // PHONE — only fill an empty cell, never overwrite a number already there.
-  if (payload.phone) {
-    var pc = sheet.getRange(row, 7);
-    if (!pc.getValue()) pc.setValue(payload.phone);
+  // PHONE — a new number replaces the one already in the cell. An empty
+  // phone (household members other than the person filling the form) does
+  // not clear it. Same digits in a different format are left alone.
+  var phoneStored = before.phoneRaw;
+  if (incomingPhoneReplaces(before.phoneRaw, payload.phone)) {
+    phoneStored = String(payload.phone).trim();
+    sheet.getRange(row, 7).setValue(phoneStored);
   }
 
   // COLUMNS J..R IN ONE WRITE — invitation sent, attending, not attending,
@@ -526,6 +757,17 @@ function updateGuestRSVP(payload, ctx) {
   if (payload.needs_elevator) note += " | ⚠️ Precisa elevador";
   if (payload.plus_one) note += " | +1: " + payload.plus_one;
   setNoteLine(sheet.getRange(row, 11), "RSVP via Form:", note);
+
+  // History is best-effort. The RSVP is already on the row; a logging failure
+  // must not turn into a false error on the form (the form would retry, and
+  // the retry would see no further changes to log).
+  try {
+    var after = stateAfterRsvp(payload, writtenName, phoneStored);
+    var changes = diffFields(before.state, after, RSVP_TRACKED_FIELDS);
+    appendRsvpHistory(sheet, row, textLog(writtenName), changes, "rsvp");
+  } catch (histErr) {
+    console.error("RSVP history log failed: " + histErr);
+  }
 }
 
 function logPassportSubmission(payload, ctx) {
