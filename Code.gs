@@ -26,10 +26,13 @@
 // CHANGES IN v6:
 // 1. The directory secret is read from Script Properties (key DIRECTORY_SECRET).
 //    Nothing secret is stored in this file. The old hardcoded value is compromised
-//    and must be rotated by the owner.
+//    and must be rotated by the owner. If the property is not set yet, the
+//    directory read stays open (with a warning) so Aurora does not go blank.
 // 2. Guest-row matching no longer uses loose substring search, which could write
 //    one person's RSVP onto a "Guest (X)" plus-one row or onto a similar name,
-//    including the guest's own row. A household-wide "no" is unchanged: the form
+//    including the guest's own row. If the match is unclear, the guest still
+//    gets a normal success and the submission is parked on "Needs Review"
+//    instead of being dropped. A household-wide "no" is unchanged: the form
 //    still names every row it intends to update, and those exact rows are written.
 // 3. A resubmitted phone number replaces the number already in the sheet.
 // 4. Every real RSVP change is appended to an "RSVP History" tab (created
@@ -42,6 +45,16 @@
 function getDirectorySecret() {
   var secret = PropertiesService.getScriptProperties().getProperty("DIRECTORY_SECRET");
   return secret ? String(secret).trim() : "";
+}
+
+// Pure decision so it can be tested without Apps Script.
+// Property unset → allow, unlocked (Aurora keeps working; warning is logged).
+// Property set → allow only when the request presents that exact value.
+function directoryAccessDecision(configuredSecret, providedSecret) {
+  var configured = configuredSecret ? String(configuredSecret).trim() : "";
+  if (!configured) return { allow: true, locked: false };
+  var provided = providedSecret == null ? "" : String(providedSecret);
+  return { allow: provided === configured, locked: true };
 }
 
 function normalizeName(raw) {
@@ -213,8 +226,13 @@ function handlePublicGuestList() {
 // data so Aurora can answer a guest about themselves, and so admin stats are
 // computed live instead of from data Aurora never actually stores.
 function handleDirectoryRequest(params) {
-  var directorySecret = getDirectorySecret();
-  if (!directorySecret || params.secret !== directorySecret) {
+  // RSVP form posts never come through here. Only Aurora's directory read does.
+  var decision = directoryAccessDecision(getDirectorySecret(), params && params.secret);
+  if (!decision.locked) {
+    console.warn(
+      "DIRECTORY_SECRET Script Property is not set. The guest directory is temporarily open so Aurora keeps working. Set DIRECTORY_SECRET to the same value as GUEST_DIRECTORY_SECRET on Render to lock it."
+    );
+  } else if (!decision.allow) {
     return ContentService
       .createTextOutput(JSON.stringify({ error: "unauthorized" }))
       .setMimeType(ContentService.MimeType.JSON);
@@ -302,15 +320,19 @@ function doPost(e) {
       // request means one lock, one sheet read, and no queue to fall off.
       var ctx = buildSheetContext();
       var members = payload.members || [];
+      var partyNames = [];
+      for (var n = 0; n < members.length; n++) {
+        if (members[n] && members[n].name) partyNames.push(members[n].name);
+      }
       for (var m = 0; m < members.length; m++) {
-        updateGuestRSVP(members[m], ctx);
+        updateGuestRSVP(members[m], ctx, partyNames);
       }
       var passports = payload.passports || [];
       for (var p = 0; p < passports.length; p++) {
         logPassportSubmission(passports[p], ctx);
       }
     } else if (type === "rsvp") {
-      updateGuestRSVP(payload);
+      updateGuestRSVP(payload, null, payload && payload.name ? [payload.name] : []);
     } else if (type === "phone") {
       updateGuestPhone(payload);
     } else if (type === "passport_submission") {
@@ -505,6 +527,79 @@ var RSVP_TRACKED_FIELDS = [
   "day3_invited", "day3_attending", "needs_elevator"
 ];
 
+// Decide whether this submission may be written onto a guest row.
+// "review" means the match is unclear: do not touch the Guests tab.
+// The caller still tells the guest the RSVP succeeded and parks the payload.
+function planGuestWrite(nameCol, payload) {
+  if (!payload || !payload.name) {
+    return { action: "review", reason: "missing name", lookupName: "" };
+  }
+  var lookupName = payload.placeholder_target || payload.name;
+  var row = findGuestRowIn(nameCol, lookupName);
+  if (row === -1) {
+    return { action: "review", reason: "unmatched", lookupName: lookupName };
+  }
+  var currentName = "";
+  try {
+    currentName = normalizeName(nameCol[row - 27][0].toString());
+    assertSafeGuestWrite(currentName, lookupName);
+  } catch (unsafe) {
+    return { action: "review", reason: "unsafe match", lookupName: lookupName };
+  }
+  return { action: "write", row: row, lookupName: lookupName, currentName: currentName };
+}
+
+function dietarySummary(payload) {
+  if (!payload) return "";
+  var flags = [];
+  var keys = [
+    ["dietary_vegetarian", "vegetarian"],
+    ["dietary_vegan", "vegan"],
+    ["dietary_nut_allergy", "nut_allergy"],
+    ["dietary_no_beef", "no_beef"],
+    ["dietary_no_pork", "no_pork"],
+    ["dietary_shellfish", "shellfish"]
+  ];
+  for (var i = 0; i < keys.length; i++) {
+    if (payload[keys[i][0]] === true) flags.push(keys[i][1]);
+  }
+  return flags.join(", ");
+}
+
+var NEEDS_REVIEW_SHEET = "Needs Review";
+var NEEDS_REVIEW_HEADERS = [
+  "Timestamp", "Submitted Name", "Lookup Name", "Party Names", "Phone",
+  "Attending", "Days", "Dietary", "Needs Elevator", "Plus One",
+  "Placeholder Target", "Reason", "Raw Payload"
+];
+
+function needsReviewValues(stamp, payload, reason, partyNames) {
+  var p = payload || {};
+  var days = p.days || [];
+  var raw = "";
+  try {
+    raw = JSON.stringify(p);
+  } catch (stringifyErr) {
+    raw = String(p);
+  }
+  var names = partyNames && partyNames.length ? partyNames.join(", ") : (p.name || "");
+  return [
+    stamp,
+    p.name || "",
+    p.placeholder_target || p.name || "",
+    names,
+    p.phone || "",
+    p.attending || "",
+    days.join(", "),
+    dietarySummary(p),
+    p.needs_elevator === true ? "TRUE" : "FALSE",
+    p.plus_one || "",
+    p.placeholder_target || "",
+    reason || "unmatched",
+    raw
+  ];
+}
+
 function diffFields(before, after, fields) {
   var changes = [];
   for (var i = 0; i < fields.length; i++) {
@@ -552,6 +647,50 @@ function appendRsvpHistory(guestsSheet, row, guestName, changes, source) {
     // Never append on top of the header row.
     var start = Math.max(history.getLastRow(), 1) + 1;
     history.getRange(start, 1, rows.length, HISTORY_HEADERS.length).setValues(rows);
+  } finally {
+    if (locked) {
+      try { lock.releaseLock(); } catch (ignore) {}
+    }
+  }
+}
+
+// Unclear match: keep the guest's success screen, and keep the submission.
+// One row on Needs Review (the full answers) and one RSVP History row.
+function recordUnmatchedRsvp(guestsSheet, payload, reason, partyNames) {
+  if (!guestsSheet) return;
+  var ss = guestsSheet.getParent();
+  var lock = LockService.getScriptLock();
+  var locked = false;
+  try {
+    lock.waitLock(15000);
+    locked = true;
+  } catch (lockErr) {}
+  try {
+    var stamp = Utilities.formatDate(new Date(), "UTC", "yyyy-MM-dd'T'HH:mm:ss'Z'");
+    var review = ss.getSheetByName(NEEDS_REVIEW_SHEET);
+    if (!review) review = ss.insertSheet(NEEDS_REVIEW_SHEET);
+    if (review.getLastRow() === 0) {
+      review.getRange(1, 1, 1, NEEDS_REVIEW_HEADERS.length).setValues([NEEDS_REVIEW_HEADERS]);
+      review.getRange(1, 1, 1, NEEDS_REVIEW_HEADERS.length).setFontWeight("bold");
+      review.setFrozenRows(1);
+    }
+    var reviewStart = Math.max(review.getLastRow(), 1) + 1;
+    review.getRange(reviewStart, 1, 1, NEEDS_REVIEW_HEADERS.length).setValues([
+      needsReviewValues(stamp, payload, reason, partyNames)
+    ]);
+
+    var history = ss.getSheetByName(HISTORY_SHEET);
+    if (!history) history = ss.insertSheet(HISTORY_SHEET);
+    if (history.getLastRow() === 0) {
+      history.getRange(1, 1, 1, HISTORY_HEADERS.length).setValues([HISTORY_HEADERS]);
+      history.getRange(1, 1, 1, HISTORY_HEADERS.length).setFontWeight("bold");
+      history.setFrozenRows(1);
+    }
+    var submitted = (payload && (payload.name || payload.placeholder_target)) || "";
+    var histStart = Math.max(history.getLastRow(), 1) + 1;
+    history.getRange(histStart, 1, 1, HISTORY_HEADERS.length).setValues([[
+      stamp, "", submitted, "match", "", "unmatched", "needs_review"
+    ]]);
   } finally {
     if (locked) {
       try { lock.releaseLock(); } catch (ignore) {}
@@ -619,13 +758,23 @@ function stateAfterRsvp(payload, writtenName, phoneStored) {
 }
 
 function updateGuestPhone(payload) {
-  if (!payload.name || !payload.phone) return;
+  if (!payload || !payload.name || !payload.phone) return;
   var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Guests");
   if (!sheet) return;
   var row = findGuestRow(sheet, payload.name);
-  if (row === -1) return;
+  if (row === -1) {
+    try { recordUnmatchedRsvp(sheet, payload, "unmatched", [payload.name]); }
+    catch (reviewErr) { console.error("Needs Review log failed: " + reviewErr); }
+    return;
+  }
   var currentName = normalizeName(sheet.getRange(row, 2).getValue().toString());
-  assertSafeGuestWrite(currentName, payload.name);
+  try {
+    assertSafeGuestWrite(currentName, payload.name);
+  } catch (unsafe) {
+    try { recordUnmatchedRsvp(sheet, payload, "unsafe match", [payload.name]); }
+    catch (reviewErr) { console.error("Needs Review log failed: " + reviewErr); }
+    return;
+  }
   var phoneCell = sheet.getRange(row, 7);
   var oldPhone = phoneCell.getValue();
   var inviteCell = sheet.getRange(row, 10);
@@ -662,26 +811,23 @@ function buildSheetContext() {
   };
 }
 
-function updateGuestRSVP(payload, ctx) {
-  // Throw instead of returning quietly. A silent return meant the guest saw a
-  // cheerful success screen while their RSVP was never written anywhere —
-  // the worst possible failure mode for something you only get one shot at.
-  // doPost catches this and returns status:"error", which the form now shows.
-  if (!payload.name) throw new Error("No name in submission");
+function updateGuestRSVP(payload, ctx, partyNames) {
+  // An unclear name must not fail the guest and must not be thrown away.
+  // doPost still returns status "ok", which is what the RSVP page treats as
+  // success. The submission is copied to Needs Review for Larissa.
   ctx = ctx || buildSheetContext();
   var sheet = ctx.sheet;
-
-  // Plus-one handling: when a guest adds their plus-one's real name (or
-  // confirms the slot with no name yet), the row we need to update is the
-  // existing "Guest (Primary Name)" placeholder row, NOT a row matching the
-  // brand-new name (that row doesn't exist). payload.placeholder_target
-  // tells us which placeholder row this submission belongs to.
-  var lookupName = payload.placeholder_target || payload.name;
-  var row = findGuestRowIn(ctx.nameCol, lookupName);
-  if (row === -1) throw new Error("Guest not found in sheet: " + lookupName);
-
-  var currentName = normalizeName(ctx.nameCol[row - 27][0].toString());
-  assertSafeGuestWrite(currentName, lookupName);
+  var plan = planGuestWrite(ctx.nameCol, payload);
+  if (plan.action === "review") {
+    try {
+      recordUnmatchedRsvp(sheet, payload, plan.reason, partyNames);
+    } catch (reviewErr) {
+      console.error("Needs Review log failed: " + reviewErr);
+    }
+    return;
+  }
+  var row = plan.row;
+  var currentName = plan.currentName;
   var before = readGuestRsvpState(sheet, row, ctx.elevatorCol);
 
   // If a real name was given for what used to be "Guest (Primary Name)",

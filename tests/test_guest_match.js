@@ -17,6 +17,10 @@ const {
   stateAfterRsvp,
   assertSafeGuestWrite,
   RSVP_TRACKED_FIELDS,
+  planGuestWrite,
+  needsReviewValues,
+  directoryAccessDecision,
+  NEEDS_REVIEW_HEADERS,
 } = context;
 
 let failed = 0;
@@ -185,6 +189,74 @@ check(
     renamed[0].oldValue === "Guest (Corey Brennan)" &&
     renamed[0].newValue === "Jane Doe (Corey Brennan)"
 );
+
+const ambiguous = planGuestWrite(rows, {
+  name: "Maria",
+  phone: "+353 83 000 0000",
+  attending: "yes",
+  days: ["day2"],
+  dietary_vegetarian: true,
+});
+check("unclear Maria is parked, not written", ambiguous.action === "review" && ambiguous.reason === "unmatched");
+
+const coreyPlan = planGuestWrite(rows, { name: "Corey Brennan", attending: "no", phone: "1" });
+check("exact Corey is still a normal write", coreyPlan.action === "write" && coreyPlan.row === 29);
+
+const plusOnePlan = planGuestWrite(rows, { name: "Guest (Corey Brennan)", attending: "no" });
+check("exact plus-one row is still a normal write", plusOnePlan.action === "write" && plusOnePlan.row === 30);
+
+const declinePlans = ["Corey Brennan", "Guest (Corey Brennan)"].map((name) =>
+  planGuestWrite(rows, { name: name, attending: "no" })
+);
+check(
+  "household no still plans a write for the guest and the plus-one",
+  declinePlans.every((p) => p.action === "write")
+);
+
+const missingPlaceholder = planGuestWrite(rows, {
+  name: "Someone New",
+  placeholder_target: "Guest (Robert Daly)",
+  attending: "yes",
+  phone: "+1 646 339 0886",
+});
+check(
+  "missing plus-one placeholder is review, not Robert's row",
+  missingPlaceholder.action === "review" && missingPlaceholder.reason === "unmatched"
+);
+
+const reviewRow = needsReviewValues(
+  "2026-10-04T00:00:00Z",
+  {
+    name: "Maria",
+    phone: "+353 83 000 0000",
+    attending: "yes",
+    days: ["day1", "day2"],
+    dietary_vegetarian: true,
+    needs_elevator: false,
+  },
+  "unmatched",
+  ["Maria", "Maria Silva"]
+);
+check("needs review has the timestamp", reviewRow[0] === "2026-10-04T00:00:00Z");
+check("needs review has the submitted name", reviewRow[1] === "Maria");
+check("needs review has the party names", reviewRow[3] === "Maria, Maria Silva");
+check("needs review has the phone", reviewRow[4] === "+353 83 000 0000");
+check("needs review has the answer", reviewRow[5] === "yes" && reviewRow[6] === "day1, day2");
+check("needs review dietary and reason", reviewRow[7] === "vegetarian" && reviewRow[11] === "unmatched");
+const raw = JSON.parse(reviewRow[12]);
+check("needs review raw payload keeps phone and attending", raw.phone === "+353 83 000 0000" && raw.attending === "yes");
+check("needs review header count matches the row", reviewRow.length === NEEDS_REVIEW_HEADERS.length);
+
+check("missing directory secret stays open", directoryAccessDecision("", "anything").allow === true && directoryAccessDecision("", "anything").locked === false);
+check("unset secret allows Aurora with no secret too", directoryAccessDecision(null, undefined).allow === true);
+check("set secret allows the matching value", directoryAccessDecision("new-secret", "new-secret").allow === true && directoryAccessDecision("new-secret", "new-secret").locked === true);
+check("set secret rejects a different value", directoryAccessDecision("new-secret", "old-secret").allow === false);
+check("set secret rejects a missing value", directoryAccessDecision("new-secret", "").allow === false);
+
+const page = fs.readFileSync(path.join(__dirname, "..", "index.html"), "utf8");
+check("RSVP page does not mention the directory secret", page.indexOf("DIRECTORY_SECRET") === -1);
+check("RSVP page still treats only status error as failure", page.indexOf('body.status === "error"') !== -1);
+check("RSVP page has no guest login or code field", !/login|access code|verification code/i.test(page));
 
 if (failed) {
   console.error(failed + " failed");
