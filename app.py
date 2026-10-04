@@ -691,15 +691,15 @@ Tudo começou em Dublin, em 2019, com um match em um aplicativo de namoro. No pr
 HOTÉIS RECOMENDADOS (mencione SEMPRE a distância a pé até a igreja E até o pub, e SEMPRE inclua o link de reserva):
 "Preparamos uma lista de hotéis recomendados bem no centro de Roma! 🇮🇹 Ficar nessa região deixa vocês perto de tudo, e teremos transporte de ida e volta fornecido dessa área pra todos os eventos principais 🚌 (incluindo o Dia 1 pro jantar de boas-vindas na vinícola, e no dia do casamento pra Villa Miani)."
 🏨 Hotel Castellino Roma (4★)
-📍 ~3-4 min a pé da igreja | ~4 min a pé do Flann O'Brien Irish Pub
+📍 ~3-4 min a pé da igreja | ~17 min a pé do Flann O'Brien Irish Pub
 💶 ~€312-347/noite (2 pessoas)
 🔗 https://www.booking.com/Share-rPP6D1l
 🏨 Hotel Hiberia (3★)
-📍 ~6-8 min a pé da igreja | ~6 min a pé do Flann O'Brien Irish Pub
+📍 ~6-8 min a pé da igreja | ~11 min a pé do Flann O'Brien Irish Pub
 💶 ~US$250 / ~€218/noite (2 pessoas)
 🔗 https://www.booking.com/Share-C3S3rD4
 🏨 Hotel Regno (3★) — reservas de 2027 abrindo em breve
-📍 ~8 min a pé da igreja | ~6 min a pé do Flann O'Brien Irish Pub
+📍 ~8 min a pé da igreja | ~17 min a pé do Flann O'Brien Irish Pub
 💶 Estimativa ~€180-280/noite (2 pessoas)
 🔗 https://www.booking.com/Share-eQuUYXw
 ✨ Opções de Luxo 5 Estrelas (mesma região central):
