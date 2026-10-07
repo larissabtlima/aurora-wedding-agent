@@ -1197,49 +1197,6 @@ def aurora_messages_create(**kwargs):
 _anthropic_messages_create = anthropic_client.messages.create
 anthropic_client.messages.create = aurora_messages_create
 
-# Portuguese words that only appear when someone is asking about air travel, so
-# a match means both "this message is in Portuguese" and "this is about flights"
-# without needing a language detector.
-_FLIGHT_WORDS_PT = (
-    "passagem", "passagens", "voo", "voos", "milhas", "parcelar", "parcelamento",
-    "remarcar", "remarcação", "emitir", "aérea", "aereo", "aéreo", "bilhete de avião",
-)
-
-
-def _asks_about_flights_in_portuguese(message):
-    """Portuguese message that touches air travel.
-
-    The prompt already said to always give Verônica's number to Brazilian
-    guests asking about flights, and Aurora still skipped it — she would ask
-    "how many days are you staying?" first and never come back to it. Same
-    failure as the welcome message, so it gets the same deterministic nudge.
-    """
-    low = (message or "").lower()
-    return any(w in low for w in _FLIGHT_WORDS_PT)
-
-
-_GREETING_ONLY = {
-    "oi", "ola", "olá", "hi", "hey", "hello", "bom dia", "boa tarde", "boa noite",
-    "tudo bem", "good morning", "good evening", "yo", "ok", "obrigado", "obrigada", "thanks",
-}
-
-
-def _looks_like_a_real_question(message):
-    """True when a first message carries an actual request, not just a hello."""
-    import re
-    text = (message or "").strip()
-    if not text:
-        return False
-    stripped = re.sub(r"[^\wÀ-ÿ ]+", "", text).strip().lower()
-    if stripped in _GREETING_ONLY:
-        return False
-    if "?" in text:
-        return True
-    # No question mark, but plenty of people ask without one ("me manda os voos").
-    words = re.findall(r"[\wÀ-ÿ']+", text)
-    return len(words) >= 5
-
-
 # Flight questions used to be answered from the August 2026 tables, because the
 # model is allowed to ignore the web search tool. A reply only counts as live
 # when the response actually contains a search.
@@ -1569,6 +1526,49 @@ def begin_flight_answer(phone, user_message, system_text, messages):
 
     threading.Thread(target=job, daemon=True).start()
     return ack
+
+
+# Portuguese words that only appear when someone is asking about air travel, so
+# a match means both "this message is in Portuguese" and "this is about flights"
+# without needing a language detector.
+_FLIGHT_WORDS_PT = (
+    "passagem", "passagens", "voo", "voos", "milhas", "parcelar", "parcelamento",
+    "remarcar", "remarcação", "emitir", "aérea", "aereo", "aéreo", "bilhete de avião",
+)
+
+
+def _asks_about_flights_in_portuguese(message):
+    """Portuguese message that touches air travel.
+
+    The prompt already said to always give Verônica's number to Brazilian
+    guests asking about flights, and Aurora still skipped it — she would ask
+    "how many days are you staying?" first and never come back to it. Same
+    failure as the welcome message, so it gets the same deterministic nudge.
+    """
+    low = (message or "").lower()
+    return any(w in low for w in _FLIGHT_WORDS_PT)
+
+
+_GREETING_ONLY = {
+    "oi", "ola", "olá", "hi", "hey", "hello", "bom dia", "boa tarde", "boa noite",
+    "tudo bem", "good morning", "good evening", "yo", "ok", "obrigado", "obrigada", "thanks",
+}
+
+
+def _looks_like_a_real_question(message):
+    """True when a first message carries an actual request, not just a hello."""
+    import re
+    text = (message or "").strip()
+    if not text:
+        return False
+    stripped = re.sub(r"[^\wÀ-ÿ ]+", "", text).strip().lower()
+    if stripped in _GREETING_ONLY:
+        return False
+    if "?" in text:
+        return True
+    # No question mark, but plenty of people ask without one ("me manda os voos").
+    words = re.findall(r"[\wÀ-ÿ']+", text)
+    return len(words) >= 5
 
 
 def get_aurora_response(phone_number, user_message):
