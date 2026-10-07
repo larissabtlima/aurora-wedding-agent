@@ -709,7 +709,16 @@ HOTÉIS RECOMENDADOS (mencione SEMPRE a distância a pé até a igreja E até o 
 🌟 Umiltà 36 — ~€600-750/noite — https://www.booking.com/Share-XglqAFK
 Sempre termine com: "Fiquem à vontade pra reservar o hotel, pousada ou Airbnb que combinar mais com o estilo e orçamento de vocês — não tem nenhuma obrigação de ficar numa dessas propriedades específicas! É só se encontrar no ponto de encontro central do transporte nos dias dos eventos."
 Sempre mostre TODAS as 7 opções juntas (não pergunte preferência antes) — nunca esconda a metade.
-VOOS — REGRA CRÍTICA: SEMPRE mencione "preços com base em 1º de agosto de 2026" toda vez que citar um preço de voo — sem exceção, mesmo que já tenha dito isso antes na mesma conversa. SEMPRE mencione as companhias aéreas que voam nessa rota. SEMPRE mostre as DUAS opções de duração (viagem só do casamento E viagem de uma semana) juntas — nunca só uma. SEMPRE termine com: "Claro, vocês podem montar a viagem do jeito que quiserem — muita gente vai aproveitar pra conhecer outras partes da Itália ou até outros países também! Isso aqui é só uma referência de preço, não uma obrigação."
+BUSCA NA WEB — só para informação que muda (a ferramenta entra nesta chamada apenas quando a pergunta precisa dela):
+Se a busca estiver disponível, use-a para voos e preços até Roma (FCO ou CIA), companhias aéreas, rotas saindo do Brasil, da Irlanda ou dos EUA, clima e horário de funcionamento. Datas do casamento, dress code, hotéis desta lista e RSVP continuam saindo destas notas, sem busca.
+Quando a pergunta for de VOOS e a busca funcionar:
+- Traga poucas opções (2 ou 3). Em cada uma: companhia, rota típica ou paradas, e um preço aproximado.
+- Diga que o preço muda e é aproximado, na data de hoje.
+- Indique onde reservar: Google Flights (https://www.google.com/travel/flights) ou Skyscanner (https://www.skyscanner.com).
+- NUNCA reserve, compre ou peça pagamento, cartão ou dados de passaporte.
+- Responda no idioma da pessoa (português ou inglês).
+Não escreva que vai pesquisar. Se a busca não estiver disponível ou falhar, responda na hora com as tabelas abaixo.
+VOOS — REGRA CRÍTICA: Se esta resposta usou a busca na web, NÃO use a data fixa abaixo — diga que o preço é aproximado e vale hoje. Se você está citando as tabelas (busca indisponível), SEMPRE mencione "preços com base em 1º de agosto de 2026" toda vez que citar um preço de voo, mesmo que já tenha dito isso antes na mesma conversa. SEMPRE mencione as companhias aéreas que voam nessa rota. SEMPRE mostre as DUAS opções de duração (viagem só do casamento E viagem de uma semana) juntas — nunca só uma. SEMPRE termine com: "Claro, vocês podem montar a viagem do jeito que quiserem — muita gente vai aproveitar pra conhecer outras partes da Itália ou até outros países também! Isso aqui é só uma referência de preço, não uma obrigação."
 Dublin → Roma Fiumicino (Aer Lingus, Ryanair):
 • Qui-Dom (4 dias): ida 24 Jun 07:25 FR5568 ($148.69) | volta 27 Jun 12:05 FR5569 ($178.66) — Ryanair
 • Qua-Ter (7 dias): ida 23 Jun 17:00 FR9613 ($82.98) | volta 29 Jun 17:40 FR9612 ($148.69) — Ryanair
@@ -733,8 +742,9 @@ COMO CONDUZIR A CONVERSA (vale em QUALQUER idioma — o que importa é a rota se
    não tenha perguntado. Explique o porquê: costumam ser bem mais baratas, e dá pra chegar até lá
    com um voo doméstico curto ou ônibus, saindo mais em conta no total.
 4. SEMPRE destaque a opção SÃO PAULO VIA LONDRES como a mais barata que a Larissa encontrou.
-5. SEMPRE diga que estes preços foram pesquisados pela Larissa, que podem ter mudado, e que você
-   não consegue consultar preços ao vivo — os sites de companhias aéreas bloqueiam o seu acesso.
+5. Se a busca na web trouxe o preço nesta resposta, use esse preço, diga que é aproximado de hoje,
+   e mande o link do Google Flights ou do Skyscanner. Se a busca não estava disponível e você está
+   usando as tabelas, diga que a Larissa pesquisou esses valores e que podem ter mudado.
 6. VERÔNICA (CVC) — REGRA ESTRITA DE QUANDO OFERECER:
    Ofereça SOMENTE se as DUAS coisas forem verdade ao mesmo tempo:
      (a) a pessoa está escrevendo em PORTUGUÊS, E
@@ -807,10 +817,10 @@ Se a pessoa NÃO tem hospedagem coberta, não invente: hotel é por conta dela, 
 recomendam a região central perto da Piazza Venezia.
 
 PREÇOS DE VOO — REGRA PARA TODAS AS ROTAS:
-Sempre que citar preços de voo, deixe claro que foram pesquisados pela Larissa, que podem ter mudado
-desde então, e que a pessoa deve conferir antes de comprar. Você NÃO consegue consultar preços ao vivo —
-os sites das companhias bloqueiam o seu acesso. Diga isso com naturalidade, sem se desculpar demais.
-Exemplo: "Estes valores a Larissa pesquisou — preços de voo mudam bastante, então vale conferir na hora
+Se esta resposta veio da busca na web, diga que o preço é aproximado, vale hoje e muda, e mande o link
+do Google Flights ou do Skyscanner. Se esta resposta usa as tabelas daqui, deixe claro que a Larissa
+pesquisou esses valores e que podem ter mudado — a pessoa deve conferir antes de comprar.
+Exemplo sem busca: "Estes valores a Larissa pesquisou — preços de voo mudam bastante, então vale conferir na hora
 de reservar."
 
 AEROPORTO — RECOMENDAÇÃO PROATIVA: quando alguém perguntar sobre voos, recomende o aeroporto certo com base na origem, sem esperar ser perguntado:
@@ -1037,6 +1047,158 @@ VERONICA_NOTE = (
     "Verônica na mesma mensagem. A única exceção é se estiver claro que a pessoa NÃO sai do "
     "Brasil (por exemplo, disse que mora em Portugal ou parte de outro país).]"
 )
+
+# Basic server-side web search. Later tool versions expect code execution, which
+# claude-haiku-4-5 does not use, so this stays on web_search_20250305.
+import re
+WEB_SEARCH_MAX_USES = 3
+WEB_SEARCH_TIMEOUT_SECONDS = 25
+WHATSAPP_TEXT_LIMIT = 4096
+_LIVE_SEARCH_RE = re.compile(
+    r"("
+    r"\bvoos?\b|\bpassagems?\b|"
+    r"\bflights?\b|\bairfare\b|\bairlines?\b|"
+    r"\bfly(?:ing)? to\b|"
+    r"\bgoogle flights\b|\bskyscanner\b|"
+    r"\bfiumicino\b|\bciampino\b|\bfco\b|\bcia\b|"
+    r"companhia a[eé]rea|"
+    r"\bweather\b|\bforecast\b|\bclima\b|previs[aã]o do tempo|"
+    r"opening hours|hor[aá]rio de funcionamento|"
+    r"que horas (?:abre|fecha)|what time (?:does|do) .{0,40}\bopen\b"
+    r")",
+    re.IGNORECASE,
+)
+
+
+def web_search_tool():
+    return {
+        "type": "web_search_20250305",
+        "name": "web_search",
+        "max_uses": WEB_SEARCH_MAX_USES,
+    }
+
+
+def needs_live_web_search(message):
+    """True only when the guest needs current info the notes cannot know."""
+    return _LIVE_SEARCH_RE.search(message or "") is not None
+
+
+def _message_text(message):
+    if isinstance(message, str):
+        return message
+    if isinstance(message, dict):
+        content = message.get("content")
+    else:
+        content = getattr(message, "content", "")
+    if isinstance(content, str):
+        return content
+    if not isinstance(content, list):
+        return ""
+    bits = []
+    for part in content:
+        if isinstance(part, str):
+            bits.append(part)
+        elif isinstance(part, dict):
+            if part.get("type") == "text" and part.get("text"):
+                bits.append(part["text"])
+        else:
+            text = getattr(part, "text", None)
+            if getattr(part, "type", None) == "text" and text:
+                bits.append(text)
+    return " ".join(bits)
+
+
+def _last_user_text(messages):
+    for message in reversed(list(messages or [])):
+        role = message.get("role") if isinstance(message, dict) else getattr(message, "role", None)
+        if role == "user":
+            return _message_text(message)
+    return ""
+
+
+def text_from_anthropic_response(response):
+    """Join text blocks. Skip server_tool_use and web_search_tool_result."""
+    content = getattr(response, "content", None)
+    if content is None and isinstance(response, dict):
+        content = response.get("content")
+    parts = []
+    for block in content or []:
+        if isinstance(block, dict):
+            if block.get("type") != "text":
+                continue
+            text = block.get("text") or ""
+        else:
+            if getattr(block, "type", None) != "text":
+                continue
+            text = getattr(block, "text", None) or ""
+        if text:
+            parts.append(text)
+    joined = ""
+    for part in parts:
+        if not joined:
+            joined = part
+            continue
+        if joined[-1].isspace() or part[0].isspace():
+            joined += part
+        else:
+            joined += " " + part
+    return joined.strip()
+
+
+def cap_whatsapp_text(text):
+    text = (text or "").strip()
+    if len(text) <= WHATSAPP_TEXT_LIMIT:
+        return text
+    cut = text[: WHATSAPP_TEXT_LIMIT - 1]
+    if "\n" in cut:
+        trimmed = cut.rsplit("\n", 1)[0].rstrip()
+        if len(trimmed) >= 1000:
+            cut = trimmed
+    return cut.rstrip() + "…"
+
+
+class _TextBlock:
+    def __init__(self, text):
+        self.type = "text"
+        self.text = text
+
+
+class _TextMessage:
+    def __init__(self, text):
+        self.content = [_TextBlock(text)]
+        self.stop_reason = "end_turn"
+
+
+def _should_attach_web_search(kwargs):
+    system = kwargs.get("system") or ""
+    if not str(system).lstrip().startswith("Você é Aurora"):
+        return False
+    return needs_live_web_search(_last_user_text(kwargs.get("messages")))
+
+
+def aurora_messages_create(**kwargs):
+    """Guest calls that need live info search once, then fall back to the notes."""
+    if _should_attach_web_search(kwargs):
+        try:
+            searched = _anthropic_messages_create(
+                timeout=WEB_SEARCH_TIMEOUT_SECONDS,
+                extra_body={"tools": [web_search_tool()]},
+                **kwargs,
+            )
+            if getattr(searched, "stop_reason", None) == "pause_turn":
+                raise RuntimeError("web search paused before an answer")
+            text = text_from_anthropic_response(searched)
+            if not text:
+                raise RuntimeError("web search returned no text")
+            return _TextMessage(cap_whatsapp_text(text))
+        except Exception as exc:
+            import sys
+            print(f"WEB SEARCH FALLBACK: {exc}", file=sys.stderr)
+    return _anthropic_messages_create(**kwargs)
+
+
+_anthropic_messages_create = anthropic_client.messages.create
+anthropic_client.messages.create = aurora_messages_create
 
 # Portuguese words that only appear when someone is asking about air travel, so
 # a match means both "this message is in Portuguese" and "this is about flights"
