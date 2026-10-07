@@ -98,28 +98,132 @@ def test_normal_question_does_not_search():
     assert message.content[0].text == "The ceremony is at 3:30 PM."
 
 
-def test_get_aurora_response_searches_flights_and_answers_plain_questions():
+LARISSA_FLIGHT = (
+    "Hey aurora, what's the cheapest flight you can find for the wedding next year for me from nyc?"
+)
+
+
+def _live_fare():
+    return Resp([
+        Block("server_tool_use"),
+        Block("web_search_tool_result"),
+        Block("text", "Delta, 1 stop, about $740. Approximate as of today. https://www.google.com/travel/flights"),
+    ])
+
+
+def test_larissa_question_is_a_flight_search_with_wedding_defaults():
+    assert app.is_flight_or_fare_question(LARISSA_FLIGHT)
+    assert app.guess_origin(LARISSA_FLIGHT) == "New York"
+    assert app.assume_return_date(LARISSA_FLIGHT) == "Sunday 27 June 2027"
+    note = app.flight_search_override(LARISSA_FLIGHT, [])
+    assert "New York" in note
+    assert "24 de junho de 2027" in note
+    assert "web_search" in note
+    assert app.flight_search_ack(LARISSA_FLIGHT) == app.FLIGHT_SEARCH_ACK_EN
+
+
+def test_saved_prices_without_a_search_are_not_the_answer():
+    """The live bug: Haiku quoted the August 2026 table and never called the tool."""
     calls = []
 
     def fake(**kwargs):
         calls.append(kwargs)
-        if "extra_body" in kwargs:
-            return Resp([
-                Block("server_tool_use"),
-                Block("text", "ITA Airways, nonstop, about $1,100. Prices change."),
-            ])
-        return Resp([Block("text", "Ceremony at 3:30 PM at Santa Maria in Aracoeli.")])
+        if len(calls) == 1:
+            return Resp([Block("text", "ITA Airways — ~$1,061.83 without baggage.")])
+        return _live_fare()
 
     app._anthropic_messages_create = fake
-    app.conversations.pop("+15550001111", None)
-    flight = app.get_aurora_response("+15550001111", "What flights are there from New York to Rome?")
-    plain = app.get_aurora_response("+15550001111", "Thanks, and the church time?")
+    text = app.lookup_live_flights(
+        "Você é Aurora",
+        [{"role": "user", "content": LARISSA_FLIGHT}],
+        LARISSA_FLIGHT,
+    )
+    assert "1,061.83" not in text
+    assert "$740" in text
+    assert calls[0]["extra_body"]["tools"][0]["type"] == "web_search_20250305"
+    assert calls[0]["extra_body"]["tools"][0]["max_uses"] == 5
+    assert "1º de agosto de 2026" in calls[0]["system"]
+    assert len(calls) == 2
 
-    assert "ITA Airways" in flight
-    assert "server_tool_use" not in flight
-    assert calls[0]["extra_body"]["tools"][0]["max_uses"] == 3
-    assert "Ceremony at 3:30 PM" in plain
-    assert "extra_body" not in calls[1]
+
+def test_search_error_still_sends_labelled_earlier_research():
+    def fake(**kwargs):
+        if "extra_body" in kwargs:
+            raise TimeoutError("web search timed out")
+        return Resp([Block("text", "ITA Airways from the saved table, about $1,061.")])
+
+    app._anthropic_messages_create = fake
+    text = app.lookup_live_flights(
+        "Você é Aurora",
+        [{"role": "user", "content": "flights from nyc"}],
+        "flights from nyc",
+    )
+    assert "earlier research" in text.lower()
+    assert "1,061" in text
+    assert "google.com/travel/flights" in text.lower() or "Google Flights" in text or "google.com/travel/flights" in text
+
+
+def test_followup_keeps_searching_until_the_topic_changes():
+    phone = "+15550002222"
+    app._flight_context_phones.add(phone)
+    assert app.is_flight_or_fare_question("Can you do that yourself now?", phone)
+    assert app.is_flight_or_fare_question("Just for the wedding", phone)
+    assert not app.is_flight_or_fare_question("What time is the ceremony?", phone)
+    assert phone not in app._flight_context_phones
+
+
+def test_get_aurora_response_acks_then_returns_live_fares_for_test_chat():
+    app._anthropic_messages_create = lambda **kwargs: _live_fare()
+    app.conversations.pop("+15550003333", None)
+    app._flight_inline.on = True
+    try:
+        reply = app.get_aurora_response("+15550003333", LARISSA_FLIGHT)
+    finally:
+        app._flight_inline.on = False
+    assert reply.startswith(app.FLIGHT_SEARCH_ACK_EN)
+    assert "$740" in reply
+    assert app._flight_inline.messages[0] == app.FLIGHT_SEARCH_ACK_EN
+    assert "$740" in app._flight_inline.messages[1]
+
+
+def test_portuguese_flight_ack():
+    assert "buscar" in app.flight_search_ack("quanto custa a passagem saindo de São Paulo?")
+
+
+def test_webhook_acks_immediately_and_does_not_duplicate(monkeypatch):
+    import threading
+    import time
+    gate = threading.Event()
+    sends = []
+
+    def slow(**kwargs):
+        if "extra_body" not in kwargs:
+            return Resp([Block("text", "earlier research from Larissa: about $900")])
+        gate.wait(3)
+        return _live_fare()
+
+    app._anthropic_messages_create = slow
+    monkeypatch.setattr(app, "send_zapi_message", lambda phone, message: sends.append(message))
+    app.processed_message_ids.clear()
+    app.conversations.pop("15550004444", None)
+    client = app.app.test_client()
+    payload = {
+        "phone": "15550004444",
+        "messageId": "msg-flight-1",
+        "text": {"message": LARISSA_FLIGHT},
+    }
+    first = client.post("/zapi", json=payload)
+    assert first.status_code == 200
+    assert sends == [app.FLIGHT_SEARCH_ACK_EN]
+    duplicate = client.post("/zapi", json=payload)
+    assert duplicate.status_code == 200
+    assert sends == [app.FLIGHT_SEARCH_ACK_EN]
+    gate.set()
+    deadline = time.time() + 3
+    while time.time() < deadline and len(sends) < 2:
+        time.sleep(0.05)
+    assert len(sends) == 2
+    assert "$740" in sends[1]
 
 
 def test_long_search_reply_stays_within_whatsapp_limit():

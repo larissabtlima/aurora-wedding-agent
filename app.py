@@ -733,11 +733,8 @@ Nova York → Roma (Delta, American Airlines, ITA Airways, United Airlines, Nors
 ═══ BRASIL → ROMA — LEIA TODO ESTE BLOCO ANTES DE RESPONDER ═══
 
 COMO CONDUZIR A CONVERSA (vale em QUALQUER idioma — o que importa é a rota ser do Brasil):
-1. NUNCA responda "não tenho informação" para voos do Brasil. Você TEM opções pesquisadas.
-2. PERGUNTE PRIMEIRO DUAS COISAS, se a pessoa ainda não disse:
-   a) De qual cidade ela sai — BH, Rio, São Paulo, Rondonópolis ou São José do Rio Preto.
-   b) Se ela vai SÓ PARA O CASAMENTO (terça 22 → domingo 27) ou FICAR A SEMANA (terça 22 → terça 29/30).
-   São tabelas de voo DIFERENTES. Não misture as duas nem chute qual ela quer.
+1. As tabelas abaixo são pesquisa ANTIGA. Numa pergunta de voo a busca ao vivo manda. Só cite estas tabelas se a busca falhou, e a primeira frase tem que dizer que são pesquisa anterior da Larissa.
+2. Não pergunte cidade nem datas antes de responder. Se a pessoa não disser outra coisa, assuma chegada até quinta 24/06/2027 e volta domingo 27/06/2027 (o casamento é sexta 25/06). Se ela pedir a semana inteira, volta terça 29/06/2027. Use a cidade que ela já disse. Depois dos preços, ofereça ajustar.
 3. Dê as opções da cidade dela (abaixo) E TAMBÉM as de São Paulo e Rio de Janeiro — mesmo que ela
    não tenha perguntado. Explique o porquê: costumam ser bem mais baratas, e dá pra chegar até lá
    com um voo doméstico curto ou ônibus, saindo mais em conta no total.
@@ -1243,6 +1240,337 @@ def _looks_like_a_real_question(message):
     return len(words) >= 5
 
 
+# Flight questions used to be answered from the August 2026 tables, because the
+# model is allowed to ignore the web search tool. A reply only counts as live
+# when the response actually contains a search.
+_FLIGHT_QUESTION_RE = re.compile(
+    r"("
+    r"\bvoos?\b|\bpassagems?\b|"
+    r"\bflights?\b|\bairfare\b|\bfares?\b|\bairlines?\b|"
+    r"\btickets?\b|"
+    r"\bfly(?:ing)?\b|"
+    r"\bgoogle flights\b|\bskyscanner\b|"
+    r"\bfiumicino\b|\bciampino\b|\bfco\b|"
+    r"companhia a[eé]rea|\bmilhas\b"
+    r")",
+    re.IGNORECASE,
+)
+_OTHER_TOPIC_RE = re.compile(
+    r"("
+    r"\brsvp\b|\bhotels?\b|\bhot[eé]is?\b|"
+    r"\bdress\b|\bvestidos?\b|\btraje\b|"
+    r"\bceremon(?:y|ies)\b|\bcerim[oô]nia\b|"
+    r"\bchurch\b|\bigreja\b|"
+    r"\bpub\b|\bwiner(?:y|ies)\b|\bvin[ií]cola\b|"
+    r"\bpassports?\b|\bpassaportes?\b"
+    r")",
+    re.IGNORECASE,
+)
+_PT_HINT_RE = re.compile(
+    r"\b(passagems?|voos?|voc[eê]|pra|n[aã]o|quanto|obrigad|barat[oa]|semana)\b",
+    re.IGNORECASE,
+)
+_ORIGIN_PATTERNS = (
+    (r"\bnew york\b|\bnyc\b|\bjfk\b|\bewr\b|\blga\b", "New York"),
+    (r"\bdublin\b", "Dublin"),
+    (r"\bshannon\b", "Shannon"),
+    (r"\bireland\b|\birlanda\b", "Ireland"),
+    (r"\bboston\b", "Boston"),
+    (r"\bchicago\b", "Chicago"),
+    (r"\bmiami\b", "Miami"),
+    (r"\blos angeles\b|\blax\b", "Los Angeles"),
+    (r"\bsan francisco\b|\bsfo\b", "San Francisco"),
+    (r"\bwashington\b|\biad\b|\bdca\b", "Washington"),
+    (r"\bs[aã]o paulo\b|\bgru\b", "São Paulo"),
+    (r"\brio de janeiro\b|\bgig\b", "Rio de Janeiro"),
+    (r"\bbelo horizonte\b|\bcnf\b", "Belo Horizonte"),
+    (r"\brondon[oó]polis\b", "Rondonópolis"),
+    (r"\bs[aã]o jos[eé] do rio preto\b", "São José do Rio Preto"),
+    (r"\blondon\b|\blondres\b|\bstansted\b", "London"),
+    (r"\bbrasil\b|\bbrazil\b", "Brazil"),
+)
+FLIGHT_SEARCH_MAX_USES = 5
+FLIGHT_SEARCH_TIMEOUT_SECONDS = 50
+FLIGHT_SEARCH_ACK_EN = (
+    "I'm going to search for the best deals now and will message you as soon as I find them ✈️"
+)
+FLIGHT_SEARCH_ACK_PT = (
+    "Vou buscar as melhores ofertas agora e te mando assim que eu achar ✈️"
+)
+_flight_context_phones = set()
+_flight_inline = threading.local()
+
+
+def reply_language(message):
+    if _PT_HINT_RE.search(message or ""):
+        return "pt"
+    return "en"
+
+
+def flight_search_ack(message):
+    if reply_language(message) == "pt":
+        return FLIGHT_SEARCH_ACK_PT
+    return FLIGHT_SEARCH_ACK_EN
+
+
+def _is_bare_ack(message):
+    import re as _re
+    stripped = _re.sub(r"[^\wÀ-ÿ ]+", "", message or "").strip().lower()
+    return stripped in _GREETING_ONLY or stripped in {"thank you", "valeu"}
+
+
+def is_flight_or_fare_question(message, phone=None):
+    text = message or ""
+    if _FLIGHT_QUESTION_RE.search(text):
+        return True
+    if not phone or phone not in _flight_context_phones:
+        return False
+    if _is_bare_ack(text):
+        return False
+    if _OTHER_TOPIC_RE.search(text):
+        _flight_context_phones.discard(phone)
+        return False
+    return True
+
+
+def guess_origin(*texts):
+    blob = "\n".join(t or "" for t in texts)
+    for pattern, name in _ORIGIN_PATTERNS:
+        if re.search(pattern, blob, re.IGNORECASE):
+            return name
+    return ""
+
+
+def assume_return_date(*texts):
+    blob = "\n".join(t or "" for t in texts).lower()
+    if re.search(r"full week|semana inteira|semana completa", blob):
+        return "Tuesday 29 June 2027"
+    return "Sunday 27 June 2027"
+
+
+def _history_text(messages):
+    return "\n".join(_message_text(m) for m in (messages or []))
+
+
+def flight_search_override(user_message, messages):
+    history = _history_text(messages)
+    origin = guess_origin(user_message, history) or "the guest did not name a city"
+    return_on = assume_return_date(user_message, history)
+    return (
+        "\n\n[NOTA INTERNA — BUSCA AO VIVO OBRIGATÓRIA NESTA RESPOSTA]\n"
+        "A pessoa perguntou de voo ou de preço de passagem. A sua PRIMEIRA ação é chamar "
+        "a ferramenta web_search. As tabelas de preço deste prompt são pesquisa de "
+        "1º de agosto de 2026. É proibido citar esses preços, números de voo ou dizer "
+        "que a Larissa já pesquisou, enquanto a busca não tiver rodado.\n"
+        "Não faça nenhuma pergunta antes de buscar. Padrões, se a pessoa não disse outra coisa:\n"
+        f"- Origem: {origin}.\n"
+        "- Chegar em Roma até quinta 24 de junho de 2027. O casamento é sexta 25 de junho de 2027.\n"
+        f"- Volta: {return_on}.\n"
+        "- Dos EUA ou do Brasil, busque Fiumicino (FCO). Da Irlanda ou de low-cost europeu, busque Ciampino (CIA).\n"
+        "Na resposta final, no idioma da pessoa: 2 ou 3 opções mais baratas ou melhores, com companhia, "
+        "paradas e preço aproximado. Diga que o preço é aproximado na data de hoje. Inclua "
+        "https://www.google.com/travel/flights ou https://www.skyscanner.com. "
+        "No fim, ofereça ajustar cidade, datas ou só voo direto. "
+        "NUNCA reserve, cobre, ou peça cartão, pagamento ou passaporte.\n"
+    )
+
+
+def response_used_web_search(response):
+    content = getattr(response, "content", None)
+    if content is None and isinstance(response, dict):
+        content = response.get("content")
+    for block in content or []:
+        btype = block.get("type") if isinstance(block, dict) else getattr(block, "type", None)
+        if btype in ("server_tool_use", "web_search_tool_result"):
+            return True
+    usage = getattr(response, "usage", None)
+    if usage is None and isinstance(response, dict):
+        usage = response.get("usage")
+    server = usage.get("server_tool_use") if isinstance(usage, dict) else getattr(usage, "server_tool_use", None)
+    if isinstance(server, dict):
+        return int(server.get("web_search_requests") or 0) > 0
+    return bool(server and getattr(server, "web_search_requests", 0))
+
+
+def _flight_tool(max_uses):
+    return {
+        "type": "web_search_20250305",
+        "name": "web_search",
+        "max_uses": max_uses,
+    }
+
+
+def _flight_search_call(system_text, model_messages, max_uses):
+    return _anthropic_messages_create(
+        model="claude-haiku-4-5-20251001",
+        max_tokens=1024,
+        system=system_text,
+        messages=model_messages,
+        timeout=FLIGHT_SEARCH_TIMEOUT_SECONDS,
+        extra_body={"tools": [_flight_tool(max_uses)]},
+    )
+
+
+def _with_booking_links(text):
+    low = (text or "").lower()
+    if "google.com/travel/flights" in low or "skyscanner.com" in low:
+        return text
+    return (text or "").rstrip() + (
+        "\n\nGoogle Flights: https://www.google.com/travel/flights\n"
+        "Skyscanner: https://www.skyscanner.com"
+    )
+
+
+def canned_flight_fallback(message):
+    if reply_language(message) == "pt":
+        return (
+            "Não consegui consultar os preços ao vivo agora. "
+            "O que eu tenho é de uma pesquisa anterior da Larissa, e os preços mudam. "
+            "Confere no Google Flights (https://www.google.com/travel/flights) "
+            "ou no Skyscanner (https://www.skyscanner.com) antes de comprar. "
+            "Eu não reservo passagem nem peço pagamento ou passaporte."
+        )
+    return (
+        "I couldn't check live prices just now. "
+        "What I have is from earlier research Larissa saved, and prices change. "
+        "Please check Google Flights (https://www.google.com/travel/flights) "
+        "or Skyscanner (https://www.skyscanner.com) before you book. "
+        "I can't book anything or take payment or passport details."
+    )
+
+
+def _label_earlier_research(text, message):
+    low = (text or "").lower()
+    if any(phrase in low for phrase in (
+        "earlier research", "pesquisa anterior", "larissa pesquisou", "larissa saved",
+    )):
+        return text
+    if reply_language(message) == "pt":
+        prefix = (
+            "Estes números são de uma pesquisa anterior da Larissa, não uma consulta ao vivo. "
+            "Os preços mudam.\n\n"
+        )
+    else:
+        prefix = (
+            "These figures are from earlier research Larissa saved, not a live search. "
+            "Prices change.\n\n"
+        )
+    return prefix + text
+
+
+def notes_fallback(system_text, model_messages, user_message):
+    import sys
+    print("FLIGHT SEARCH FALLBACK: earlier research", file=sys.stderr)
+    try:
+        response = _anthropic_messages_create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=1024,
+            system=system_text + (
+                "\n\n[NOTA INTERNA — A BUSCA AO VIVO FALHOU]\n"
+                "Responda com as tabelas de voo. A primeira frase, no idioma da pessoa, "
+                "diz que estes números são de uma pesquisa anterior da Larissa "
+                "(por volta de 1º de agosto de 2026), não uma consulta ao vivo, e que o preço muda. "
+                "Não pergunte nada antes dos preços. Inclua o link do Google Flights ou do Skyscanner. "
+                "NUNCA reserve, peça pagamento ou passaporte.\n"
+            ),
+            messages=model_messages,
+            timeout=40,
+        )
+        text = text_from_anthropic_response(response)
+        if text:
+            labelled = _label_earlier_research(text, user_message)
+            return cap_whatsapp_text(_with_booking_links(labelled))
+    except Exception as exc:
+        print(f"FLIGHT NOTES FALLBACK ERROR: {exc}", file=sys.stderr)
+    return canned_flight_fallback(user_message)
+
+
+def lookup_live_flights(system_text, model_messages, user_message):
+    """Search first. Notes are only the second message when search does not run."""
+    import sys
+    searched_system = system_text + flight_search_override(user_message, model_messages)
+    try:
+        first = _flight_search_call(searched_system, model_messages, FLIGHT_SEARCH_MAX_USES)
+    except Exception as exc:
+        print(f"FLIGHT SEARCH ERROR: {exc}", file=sys.stderr)
+        return notes_fallback(system_text, model_messages, user_message)
+    if response_used_web_search(first):
+        text = text_from_anthropic_response(first)
+        if text:
+            print("FLIGHT SEARCH: live results", file=sys.stderr)
+            return cap_whatsapp_text(_with_booking_links(text))
+        print("FLIGHT SEARCH: tool ran but returned no text", file=sys.stderr)
+        return notes_fallback(system_text, model_messages, user_message)
+    print("FLIGHT SEARCH: model answered without searching; retrying", file=sys.stderr)
+    retry_messages = list(model_messages) + [
+        {"role": "assistant", "content": "I need a live web search before I quote any fare."},
+        {
+            "role": "user",
+            "content": (
+                "Call the web_search tool now for current fares. "
+                "Do not use the saved August 2026 prices."
+            ),
+        },
+    ]
+    try:
+        second = _flight_search_call(searched_system, retry_messages, FLIGHT_SEARCH_MAX_USES)
+    except Exception as exc:
+        print(f"FLIGHT SEARCH RETRY ERROR: {exc}", file=sys.stderr)
+        return notes_fallback(system_text, model_messages, user_message)
+    if response_used_web_search(second):
+        text = text_from_anthropic_response(second)
+        if text:
+            print("FLIGHT SEARCH: live results on retry", file=sys.stderr)
+            return cap_whatsapp_text(_with_booking_links(text))
+    print("FLIGHT SEARCH: retry did not search", file=sys.stderr)
+    return notes_fallback(system_text, model_messages, user_message)
+
+
+def _inline_flight_reply():
+    if getattr(_flight_inline, "on", False):
+        return True
+    try:
+        from flask import has_request_context
+        return has_request_context() and request.path == "/test-chat"
+    except Exception:
+        return False
+
+
+def begin_flight_answer(phone, user_message, system_text, messages):
+    """Ack now. Search in the background on WhatsApp, or finish inline on /test-chat."""
+    import sys
+    _flight_context_phones.add(phone)
+    if "Verônica" not in system_text and _asks_about_flights_in_portuguese(_history_text(messages)):
+        system_text += VERONICA_NOTE
+    ack = flight_search_ack(user_message)
+    model_messages = [dict(m) for m in messages]
+    add_to_conversation(phone, "assistant", ack)
+    save_state()
+    if _inline_flight_reply():
+        second = sanitize_for_whatsapp(lookup_live_flights(system_text, model_messages, user_message))
+        add_to_conversation(phone, "assistant", second)
+        save_state()
+        _flight_inline.messages = [ack, second]
+        return ack + "\n\n" + second
+
+    def job():
+        try:
+            second = lookup_live_flights(system_text, model_messages, user_message)
+        except Exception as exc:
+            print(f"FLIGHT SEARCH JOB ERROR: {exc}", file=sys.stderr)
+            second = canned_flight_fallback(user_message)
+        second = sanitize_for_whatsapp(second)
+        add_to_conversation(phone, "assistant", second)
+        save_state()
+        try:
+            send_zapi_message(phone, second)
+        except Exception as exc:
+            print(f"FLIGHT SEARCH SEND ERROR: {exc}", file=sys.stderr)
+
+    threading.Thread(target=job, daemon=True).start()
+    return ack
+
+
 def get_aurora_response(phone_number, user_message):
     add_to_conversation(phone_number, "user", user_message)
     messages = get_conversation(phone_number)
@@ -1265,6 +1593,8 @@ def get_aurora_response(phone_number, user_message):
 
     if _asks_about_flights_in_portuguese(user_message):
         system_text += VERONICA_NOTE
+    if is_flight_or_fare_question(user_message, phone_number):
+        return begin_flight_answer(phone_number, user_message, system_text, messages)
     response = anthropic_client.messages.create(
         model="claude-haiku-4-5-20251001",
         max_tokens=1024,
@@ -1499,7 +1829,12 @@ def test_chat():
             reply = with_phone_lock(phone, lambda: get_aurora_response(phone, message))
     else:
         reply = with_phone_lock(phone, lambda: get_aurora_response(phone, message))
-    resp = jsonify({"reply": reply})
+    body = {"reply": reply}
+    extra_messages = getattr(_flight_inline, "messages", None)
+    _flight_inline.messages = None
+    if extra_messages:
+        body["messages"] = list(extra_messages)
+    resp = jsonify(body)
     resp.headers['Access-Control-Allow-Origin'] = '*'
     return resp, 200
 
