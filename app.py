@@ -1,5 +1,8 @@
 import os
+import re
 import json
+import hmac
+import sqlite3
 import time
 import random
 import threading
@@ -35,11 +38,24 @@ anthropic_client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
 # 7. Guest-facing Aurora can now answer "am I on the list", "is my
 #    accommodation covered", "who's in my RSVP party" — scoped strictly to
 #    the person she's talking to, using the new directory endpoint.
+# 8. Admin actions ([ALL], [BRIDAL], [admin]) run only when ZAPI_WEBHOOK_SECRET
+#    matches the webhook token. Guest messages are always answered, including
+#    when the secret is unset or the token is missing. A warning is logged.
+# 9. A message that is clearly for Larissa personally, not about the wedding,
+#    gets a short reply in the sender's language with her current number.
+# 10. Conversations and guest bindings persist in SQLite on the disk at
+#     DATA_DIR (default /var/data). The model only sees the recent tail.
 # ============================================================
 
 DATA_DIR = os.environ.get("DATA_DIR", "/var/data")
 DATA_FILE = os.path.join(DATA_DIR, "aurora_data.json")
-_save_lock = threading.Lock()
+DB_FILE = os.path.join(DATA_DIR, "aurora.sqlite")
+# Everything we keep for a guest. The model does not see all of it: a long
+# wedding chat (flight tables, hotel lists) would blow the prompt budget.
+STORED_HISTORY_LIMIT = 40
+MODEL_HISTORY_LIMIT = 12
+_save_lock = threading.RLock()
+_db_conn = None
 
 conversations = {}
 admin_conversations = {}
@@ -66,46 +82,159 @@ def with_phone_lock(phone, fn, *args, **kwargs):
         processing.discard(phone)
 
 
-def _state_dict():
-    return {
-        "conversations": conversations,
-        "admin_conversations": admin_conversations,
-        "phone_registry": phone_registry,
-        "all_phones": list(all_phones),
+def _get_db():
+    """One connection for this process. Callers serialize on _save_lock."""
+    global _db_conn
+    if _db_conn is None:
+        os.makedirs(DATA_DIR, exist_ok=True)
+        conn = sqlite3.connect(DB_FILE, check_same_thread=False, timeout=30)
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA synchronous=NORMAL")
+        conn.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS messages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                kind TEXT NOT NULL,
+                phone TEXT NOT NULL,
+                role TEXT NOT NULL,
+                content TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS phone_registry (
+                phone TEXT PRIMARY KEY,
+                guest_name TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS known_phones (
+                phone TEXT PRIMARY KEY
+            );
+            """
+        )
+        _db_conn = conn
+    return _db_conn
+
+
+def _persist_memory_locked():
+    conn = _get_db()
+    guest_rows = []
+    for phone, msgs in conversations.items():
+        for msg in msgs:
+            guest_rows.append((
+                "guest", str(phone), msg.get("role") or "", msg.get("content") or "",
+            ))
+    admin_rows = []
+    for phone, msgs in admin_conversations.items():
+        for msg in msgs:
+            admin_rows.append((
+                "admin", str(phone), msg.get("role") or "", msg.get("content") or "",
+            ))
+    try:
+        conn.execute("DELETE FROM messages")
+        if guest_rows or admin_rows:
+            conn.executemany(
+                "INSERT INTO messages (kind, phone, role, content) VALUES (?, ?, ?, ?)",
+                guest_rows + admin_rows,
+            )
+        conn.execute("DELETE FROM phone_registry")
+        if phone_registry:
+            conn.executemany(
+                "INSERT INTO phone_registry (phone, guest_name) VALUES (?, ?)",
+                [(str(p), str(n)) for p, n in phone_registry.items()],
+            )
+        conn.execute("DELETE FROM known_phones")
+        if all_phones:
+            conn.executemany(
+                "INSERT INTO known_phones (phone) VALUES (?)",
+                [(str(p),) for p in all_phones],
+            )
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+
+
+def _load_from_db(conn):
+    global conversations, admin_conversations, phone_registry, all_phones
+    conversations = {}
+    admin_conversations = {}
+    for row in conn.execute("SELECT kind, phone, role, content FROM messages ORDER BY id"):
+        bucket = conversations if row["kind"] == "guest" else admin_conversations
+        bucket.setdefault(row["phone"], []).append(
+            {"role": row["role"], "content": row["content"]}
+        )
+    phone_registry = {
+        row["phone"]: row["guest_name"]
+        for row in conn.execute("SELECT phone, guest_name FROM phone_registry")
     }
+    all_phones = {row["phone"] for row in conn.execute("SELECT phone FROM known_phones")}
+    for phone, msgs in list(conversations.items()):
+        if len(msgs) > STORED_HISTORY_LIMIT:
+            conversations[phone] = msgs[-STORED_HISTORY_LIMIT:]
+    for phone, msgs in list(admin_conversations.items()):
+        if len(msgs) > 20:
+            admin_conversations[phone] = msgs[-20:]
+
+
+# Set when the disk cannot be used. Replies keep using the in-memory copies.
+_persistence_disabled = False
 
 
 def save_state():
+    global _persistence_disabled
+    if _persistence_disabled:
+        return
     with _save_lock:
         try:
-            os.makedirs(DATA_DIR, exist_ok=True)
-            tmp_path = DATA_FILE + ".tmp"
-            with open(tmp_path, "w", encoding="utf-8") as f:
-                json.dump(_state_dict(), f)
-            os.replace(tmp_path, DATA_FILE)
+            _persist_memory_locked()
         except Exception as e:
+            _persistence_disabled = True
             import sys
-            print(f"SAVE STATE ERROR: {str(e)}", file=sys.stderr)
+            print(
+                f"SAVE STATE ERROR: {e}. SQLite is unavailable, so this process "
+                "will keep replying from memory only.",
+                file=sys.stderr,
+            )
 
 
 def load_state():
-    global conversations, admin_conversations, phone_registry, all_phones
+    global conversations, admin_conversations, phone_registry, all_phones, _persistence_disabled
     try:
+        conn = _get_db()
+        counts = [
+            conn.execute(f"SELECT COUNT(*) AS n FROM {table}").fetchone()["n"]
+            for table in ("messages", "phone_registry", "known_phones")
+        ]
+        if any(counts):
+            _load_from_db(conn)
+            import sys
+            stored = sum(len(v) for v in conversations.values())
+            print(f"LOADED STATE: sqlite {len(all_phones)} phones, {stored} messages", file=sys.stderr)
+            return
+        # First boot after this change: bring the old JSON snapshot across once.
+        # The JSON file is left in place so a rollback of this file still has it.
         if os.path.exists(DATA_FILE):
             with open(DATA_FILE, "r", encoding="utf-8") as f:
                 data = json.load(f)
-            conversations = data.get("conversations", {})
-            admin_conversations = data.get("admin_conversations", {})
-            phone_registry = data.get("phone_registry", {})
-            all_phones = set(data.get("all_phones", []))
+            conversations = data.get("conversations", {}) or {}
+            admin_conversations = data.get("admin_conversations", {}) or {}
+            phone_registry = data.get("phone_registry", {}) or {}
+            all_phones = set(data.get("all_phones", []) or [])
+            _persist_memory_locked()
             import sys
-            print(f"LOADED STATE: {len(all_phones)} phones", file=sys.stderr)
-        else:
-            import sys
-            print("LOADED STATE: no existing data file, starting fresh", file=sys.stderr)
-    except Exception as e:
+            print(
+                f"MIGRATED STATE: {DATA_FILE} -> {DB_FILE} ({len(all_phones)} phones)",
+                file=sys.stderr,
+            )
+            return
         import sys
-        print(f"LOAD STATE ERROR: {str(e)}", file=sys.stderr)
+        print("LOADED STATE: no existing memory, starting fresh", file=sys.stderr)
+    except Exception as e:
+        _persistence_disabled = True
+        import sys
+        print(
+            f"LOAD STATE ERROR: {e}. Starting from in-memory history only. "
+            "Aurora will keep replying.",
+            file=sys.stderr,
+        )
 
 
 ADMIN_NUMBERS = {"+16463390886", "+19292277546", "+393490541017"}
@@ -203,6 +332,26 @@ def strip_admin_prefix(msg):
 
 
 load_state()
+
+
+def _startup_webhook_warning():
+    if os.environ.get("ZAPI_WEBHOOK_SECRET", "").strip():
+        return
+    import sys
+    print(
+        "Z-API WEBHOOK WARNING: ZAPI_WEBHOOK_SECRET is not set. "
+        "Guest messages are still accepted so the concierge keeps working, "
+        "even if a later request arrives without the token. "
+        "Admin actions ([ALL], [BRIDAL], [admin]) are blocked until the secret "
+        "is set, because the phone number in the webhook body can be forged. "
+        "Set ZAPI_WEBHOOK_SECRET and point the Z-API 'on receive' webhook at "
+        "/zapi?token=<that secret>. Z-API does not send Client-Token on inbound "
+        "webhooks; that header is only for calls Aurora makes to Z-API.",
+        file=sys.stderr,
+    )
+
+
+_startup_webhook_warning()
 
 # ============================================================
 # GUEST DIRECTORY — the single source of truth for who's a guest.
@@ -492,7 +641,8 @@ def build_guest_context_note(phone_number, user_message):
     if claimed:
         matched = find_known_guest(claimed)
         if matched and matched != name:
-            phone_registry[phone_number] = matched
+            with _save_lock:
+                phone_registry[phone_number] = matched
             name = matched
             save_state()
 
@@ -513,7 +663,8 @@ def build_guest_context_note(phone_number, user_message):
     # as RSVPs come in.
     known_phone = str(record.get("phone") or "").strip()
     if known_phone and not phones_look_like_same_person(known_phone, phone_number):
-        phone_registry.pop(phone_number, None)
+        with _save_lock:
+            phone_registry.pop(phone_number, None)
         save_state()
         return (
             "\n\n[NOTA INTERNA — NÃO leia isso em voz alta: a pessoa diz ser "
@@ -1009,11 +1160,25 @@ def get_conversation(phone_number):
 
 
 def add_to_conversation(phone_number, role, content):
-    if phone_number not in conversations:
-        conversations[phone_number] = []
-    conversations[phone_number].append({"role": role, "content": content})
-    if len(conversations[phone_number]) > 40:
-        conversations[phone_number] = conversations[phone_number][-40:]
+    with _save_lock:
+        if phone_number not in conversations:
+            conversations[phone_number] = []
+        conversations[phone_number].append({"role": role, "content": content})
+        if len(conversations[phone_number]) > STORED_HISTORY_LIMIT:
+            conversations[phone_number] = conversations[phone_number][-STORED_HISTORY_LIMIT:]
+
+
+def messages_for_model(history, limit=MODEL_HISTORY_LIMIT):
+    """The tail of a conversation, starting on a user turn.
+
+    Stored history can be longer than this. Anthropic requires the first
+    message to be from the user, so a window that opens on an assistant
+    reply drops that reply.
+    """
+    window = [{"role": m.get("role"), "content": m.get("content")} for m in history[-limit:]]
+    while window and window[0].get("role") != "user":
+        window = window[1:]
+    return window
 
 
 NO_PROMPT_DISCLOSURE_NOTE = (
@@ -1243,7 +1408,145 @@ def _looks_like_a_real_question(message):
     return len(words) >= 5
 
 
+# Friends still text +353 83 398 6529 thinking it is Larissa's personal Irish
+# number. Only fire when the message is clearly for her, not a wedding question.
+# A miss (Aurora answers as the concierge) is safer than telling a real guest
+# they have the wrong number.
+_WEDDING_TOPIC_RE = re.compile(
+    r"\b("
+    r"weddings?|casamentos?|casar|rsvp|"
+    r"roma|rome|hot[eé]is?|hotels?|"
+    r"voos?|flights?|passagens?|"
+    r"dress(?:\s*code)?|vestidos?|traje|igreja|church|pub|"
+    r"vin[ií]colas?|winer(?:y|ies)|vineyards?|"
+    r"robert|noivos?|noivas?|brides?|grooms?|"
+    r"convidad\w*|invitations?|convites?|"
+    r"plus[- ]?ones?|acompanhantes?|passaportes?|passports?|"
+    r"junho|june|2027|aurora|"
+    r"cerim[oô]nias?|cerimonias?|ceremon(?:y|ies)|"
+    r"villa|miani|aracoeli|"
+    r"hosped\w*|accommodations?|airbnbs?|"
+    r"roteiros?|itinerar(?:y|ies)|transportes?|shuttles?|"
+    r"black[- ]?tie|presen[cç]as?|formul[aá]rios?|"
+    r"recep[cç][õo]es|recep[cç][aã]o|receptions?|"
+    r"etias|vistos?|visas?|"
+    r"matrimoni[oi]?|spos[aio]|invit[oi]|albergo|alberghi|vestito|vestiti|ricevimento|volo|voli"
+    r")\b",
+    re.IGNORECASE,
+)
+_LARISSA_RE = re.compile(r"\b(?:larissa|lari)\b", re.IGNORECASE)
+_PERSONAL_REACH_RE = re.compile(
+    r"("
+    r"\bme liga\b|"
+    r"\bliga pra mim\b|"
+    r"\bme ligue\b|"
+    r"\bcall me\b(?!\s+a\b)|"
+    r"\bgive me a call\b|"
+    r"\bring me\b|"
+    r"\btext me\b|"
+    r"\bphone me\b|"
+    r"\bchiamami\b|"
+    r"\bsaudades\b|"
+    r"\bmiss you\b|"
+    r"\bte amo\b|"
+    r"\blove you\b|"
+    r"\bcad[eê] voc[eê]\b|"
+    r"\bwhere are you\b|"
+    r"\bdove sei\b|"
+    r"\bare you free\b|"
+    r"\bvoc[eê] t[aá] livre\b|"
+    r"\bhappy birthday\b|"
+    r"\bparab[eé]ns\b|"
+    r"\bn[uú]mero antigo\b|"
+    r"\bold number\b|"
+    r"\bwrong number\b|"
+    r"\bnumero sbagliato\b"
+    r")",
+    re.IGNORECASE,
+)
+_LANG_MARKERS = {
+    "pt": re.compile(
+        r"\b(oi|ol[aá]|voc[eê]|pra|n[aã]o|saudades|me liga|cad[eê]|obrigad[oa]|tudo bem|ligar|quando)\b",
+        re.IGNORECASE,
+    ),
+    "it": re.compile(
+        r"\b(ciao|chiamami|come stai|buongiorno|buonasera|questo|dove sei|sei|grazie|sbagliato)\b",
+        re.IGNORECASE,
+    ),
+    "en": re.compile(
+        r"\b(hi|hey|hello|call me|are you|you|please|where|miss|free|this|old number|wrong number)\b",
+        re.IGNORECASE,
+    ),
+}
+
+LARISSA_PERSONAL_NUMBER_DISPLAY = "+1 646 339 0886"
+PERSONAL_NUMBER_REPLIES = {
+    "pt": (
+        "Oi! Este número agora é da Aurora, a assistente do casamento da Larissa e do Robert. "
+        "A Larissa não recebe mais mensagens pessoais por aqui. "
+        "Você pode falar com ela no {number}."
+    ),
+    "en": (
+        "Hi! This number is now Aurora, the assistant for Larissa and Robert's wedding. "
+        "Larissa doesn't get personal messages here anymore. "
+        "You can reach her at {number}."
+    ),
+    "it": (
+        "Ciao! Questo numero adesso è di Aurora, l'assistente per il matrimonio di Larissa e Robert. "
+        "Larissa non riceve più messaggi personali qui. "
+        "Puoi scriverle al {number}."
+    ),
+}
+
+
+def looks_like_personal_message_for_larissa(message):
+    text = (message or "").strip()
+    if not text:
+        return False
+    if _WEDDING_TOPIC_RE.search(text):
+        return False
+    if _LARISSA_RE.search(text):
+        return True
+    # No name, so require an explicit "I'm trying to reach a person" phrase,
+    # and ignore long messages where one of those words is incidental.
+    if len(re.findall(r"\w+", text, flags=re.UNICODE)) > 40:
+        return False
+    return _PERSONAL_REACH_RE.search(text) is not None
+
+
+def detect_message_language(message):
+    text = message or ""
+    scores = {lang: len(rx.findall(text)) for lang, rx in _LANG_MARKERS.items()}
+    best = max(scores, key=lambda lang: scores[lang])
+    if scores[best] == 0:
+        return "en"
+    leaders = [lang for lang, score in scores.items() if score == scores[best]]
+    if len(leaders) == 1:
+        return leaders[0]
+    low = text.lower()
+    if re.search(r"\b(ciao|chiamami|buongiorno)\b", low):
+        return "it"
+    if re.search(r"\b(oi|ol[aá]|voc[eê]|saudades)\b", low):
+        return "pt"
+    return "en"
+
+
+def personal_reply_for(message):
+    if not looks_like_personal_message_for_larissa(message):
+        return None
+    lang = detect_message_language(message)
+    template = PERSONAL_NUMBER_REPLIES.get(lang, PERSONAL_NUMBER_REPLIES["en"])
+    return template.format(number=LARISSA_PERSONAL_NUMBER_DISPLAY)
+
+
 def get_aurora_response(phone_number, user_message):
+    personal = personal_reply_for(user_message)
+    if personal:
+        add_to_conversation(phone_number, "user", user_message)
+        add_to_conversation(phone_number, "assistant", personal)
+        save_state()
+        return personal
+
     add_to_conversation(phone_number, "user", user_message)
     messages = get_conversation(phone_number)
     guest_note = build_guest_context_note(phone_number, user_message)
@@ -1269,7 +1572,7 @@ def get_aurora_response(phone_number, user_message):
         model="claude-haiku-4-5-20251001",
         max_tokens=1024,
         system=system_text,
-        messages=messages
+        messages=messages_for_model(messages, MODEL_HISTORY_LIMIT),
     )
     raw_text = response.content[0].text
     assistant_message = sanitize_for_whatsapp(raw_text)
@@ -1317,11 +1620,13 @@ def get_admin_response(phone_number, user_message):
     if matched:
         stats = dict(stats)
         stats["convidados_mencionados"] = matched
-    if phone_number not in admin_conversations:
-        admin_conversations[phone_number] = []
-    history = admin_conversations[phone_number]
+    with _save_lock:
+        history = list(admin_conversations.get(phone_number, []))
     context = f"[{name} está consultando. Dados atuais (ao vivo da planilha): {json.dumps(stats, ensure_ascii=False)}]\n\n{user_message}"
-    messages = history + [{"role": "user", "content": context}]
+    prior = messages_for_model(history, MODEL_HISTORY_LIMIT)
+    while prior and prior[-1].get("role") == "user":
+        prior = prior[:-1]
+    messages = prior + [{"role": "user", "content": context}]
     response = anthropic_client.messages.create(
         model="claude-haiku-4-5-20251001",
         max_tokens=800,
@@ -1329,10 +1634,12 @@ def get_admin_response(phone_number, user_message):
         messages=messages
     )
     reply = sanitize_for_whatsapp(response.content[0].text)
-    history.append({"role": "user", "content": user_message})
-    history.append({"role": "assistant", "content": reply})
-    if len(history) > 20:
-        admin_conversations[phone_number] = history[-20:]
+    with _save_lock:
+        stored = admin_conversations.setdefault(phone_number, [])
+        stored.append({"role": "user", "content": user_message})
+        stored.append({"role": "assistant", "content": reply})
+        if len(stored) > 20:
+            admin_conversations[phone_number] = stored[-20:]
     save_state()
     return reply
 
@@ -1413,9 +1720,70 @@ def try_handle_broadcast(admin_phone, message):
     )
 
 
+def _token_matches(provided, expected):
+    if not provided or not expected:
+        return False
+    a = provided.encode("utf-8")
+    b = expected.encode("utf-8")
+    if len(a) != len(b):
+        return False
+    return hmac.compare_digest(a, b)
+
+
+_token_mismatch_warned = False
+
+
+def zapi_webhook_auth(path_token=None):
+    """Return 'ok' or 'guest-only'. Never a reason to drop a guest reply.
+
+    Z-API does not sign inbound webhooks and does not send Client-Token on
+    them (that header authenticates Aurora's outbound API calls only). The
+    shared secret travels in the webhook URL: /zapi?token=... or /zapi/<token>.
+    A Client-Token header equal to ZAPI_WEBHOOK_SECRET is also accepted.
+
+    'ok' means admin commands may run. 'guest-only' means a normal message is
+    still answered, and [ALL] / [BRIDAL] / [admin] are refused. That is also
+    the result when the secret is set but this request did not present it.
+    """
+    global _token_mismatch_warned
+    secret = os.environ.get("ZAPI_WEBHOOK_SECRET", "").strip()
+    if not secret:
+        return "guest-only"
+    provided_query = (request.args.get("token") or "").strip()
+    provided_header = (request.headers.get("Client-Token") or "").strip()
+    provided_path = (path_token or "").strip()
+    if (
+        _token_matches(provided_query, secret)
+        or _token_matches(provided_header, secret)
+        or _token_matches(provided_path, secret)
+    ):
+        return "ok"
+    if not _token_mismatch_warned:
+        _token_mismatch_warned = True
+        import sys
+        print(
+            "Z-API WEBHOOK WARNING: ZAPI_WEBHOOK_SECRET is set but this request "
+            "did not include the matching token. Guest messages are still being "
+            "answered. Admin commands stay blocked until the webhook URL includes "
+            "?token= that same secret.",
+            file=sys.stderr,
+        )
+    return "guest-only"
+
+
+def message_requests_admin_action(message):
+    stripped = (message or "").strip()
+    upper = stripped.upper()
+    if upper.startswith("[ALL]") or upper.startswith("[BRIDAL]"):
+        return True
+    return is_admin_query(stripped)
+
+
 @app.route('/zapi', methods=['POST'])
-def zapi_webhook():
+@app.route('/zapi/<path:token>', methods=['POST'])
+def zapi_webhook(token=None):
     try:
+        auth = zapi_webhook_auth(token)
         data = request.get_json(force=True) or {}
         if data.get('fromMe', False):
             return Response('', status=200)
@@ -1433,7 +1801,21 @@ def zapi_webhook():
         phone = str(data.get('phone', '') or data.get('from', '')).replace('@s.whatsapp.net', '').replace('whatsapp:', '').strip()
         if not phone or not text:
             return Response('', status=200)
-        all_phones.add(phone)
+        with _save_lock:
+            all_phones.add(phone)
+
+        # Admin powers are decided from the phone INSIDE the body. That phone
+        # can be forged until the webhook secret is set, so [ALL] / [BRIDAL] /
+        # [admin] do nothing unless this request presented the secret. Guest
+        # replies are not blocked in that case — see zapi_webhook_auth.
+        if is_admin_phone(phone) and message_requests_admin_action(text) and auth != "ok":
+            import sys
+            print(
+                "Z-API: blocked an admin action from an unverified webhook. "
+                "Set ZAPI_WEBHOOK_SECRET and add ?token= to the Z-API webhook URL.",
+                file=sys.stderr,
+            )
+            return Response('', status=200)
 
         if is_admin_phone(phone):
             broadcast_result = try_handle_broadcast(phone, text)
@@ -1487,7 +1869,8 @@ def test_chat():
     message = str(data.get("message", "")).strip()
     if not phone or not message:
         return jsonify({"error": "phone and message are required"}), 400
-    all_phones.add(phone)
+    with _save_lock:
+        all_phones.add(phone)
     if is_admin_phone(phone):
         broadcast_result = try_handle_broadcast(phone, message)
         if broadcast_result is not None:
@@ -1533,19 +1916,20 @@ def reset_identities():
     body = request.get_json(silent=True) or {}
     full = bool(body.get("full"))
 
-    cleared_ids = len(phone_registry)
-    phone_registry.clear()
+    with _save_lock:
+        cleared_ids = len(phone_registry)
+        phone_registry.clear()
 
-    cleared_phones = 0
-    cleared_convos = 0
-    if full:
-        cleared_phones = len(all_phones)
-        cleared_convos = len(conversations)
-        all_phones.clear()
-        conversations.clear()
-        admin_conversations.clear()
+        cleared_phones = 0
+        cleared_convos = 0
+        if full:
+            cleared_phones = len(all_phones)
+            cleared_convos = len(conversations)
+            all_phones.clear()
+            conversations.clear()
+            admin_conversations.clear()
 
-    save_state()
+        save_state()
     resp = jsonify({
         "status": "ok",
         "cleared_identities": cleared_ids,
