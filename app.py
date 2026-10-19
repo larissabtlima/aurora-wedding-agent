@@ -36,6 +36,15 @@ anthropic_client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
 #    accommodation covered", "who's in my RSVP party" — scoped strictly to
 #    the person she's talking to, using the new directory endpoint.
 # ============================================================
+# CHANGES IN THIS VERSION (v6) — summary for Larissa:
+# 1. "Where should I stay?" now does a short live web search, same shape as
+#    flights: a quick "I'm searching, I'll message you" note, then options.
+#    The saved hotel list stays first. If the search fails, Aurora says so
+#    and sends that saved list.
+# 2. Help with hotels, apartments, tours or transfers includes a short, calm
+#    reminder: book places with lots of reviews on known sites, and never pay
+#    by bank transfer or outside the booking site.
+# ============================================================
 
 DATA_DIR = os.environ.get("DATA_DIR", "/var/data")
 DATA_FILE = os.path.join(DATA_DIR, "aurora_data.json")
@@ -710,7 +719,9 @@ HOTÉIS RECOMENDADOS (mencione SEMPRE a distância a pé até a igreja E até o 
 Sempre termine com: "Fiquem à vontade pra reservar o hotel, pousada ou Airbnb que combinar mais com o estilo e orçamento de vocês — não tem nenhuma obrigação de ficar numa dessas propriedades específicas! É só se encontrar no ponto de encontro central do transporte nos dias dos eventos."
 Sempre mostre TODAS as 7 opções juntas (não pergunte preferência antes) — nunca esconda a metade.
 BUSCA NA WEB — só para informação que muda (a ferramenta entra nesta chamada apenas quando a pergunta precisa dela):
-Se a busca estiver disponível, use-a para voos e preços até Roma (FCO ou CIA), companhias aéreas, rotas saindo do Brasil, da Irlanda ou dos EUA, clima e horário de funcionamento. Datas do casamento, dress code, hotéis desta lista e RSVP continuam saindo destas notas, sem busca.
+Se a busca estiver disponível, use-a para voos e preços até Roma (FCO ou CIA), companhias aéreas, rotas saindo do Brasil, da Irlanda ou dos EUA, clima e horário de funcionamento. Datas do casamento, dress code e RSVP continuam saindo destas notas, sem busca.
+Hotel ou lugar para ficar em Roma: quando a busca ao vivo estiver nesta chamada, as 7 opções salvas abaixo vêm primeiro. A busca só acrescenta poucas alternativas bem avaliadas, perto da igreja (Santa Maria in Aracoeli) e do centro, com faixa de preço quando existir e link de site conhecido (Booking.com, Airbnb ou Google). Se a busca não estiver disponível, use só a lista salva e diga que são as recomendações da Larissa, não uma consulta ao vivo.
+GOLPES DE RESERVA — aviso curto, obrigatório, no idioma da pessoa, sempre que ajudar com hotel, apartamento, aluguel por temporada, passeio/tour ou transfer/traslado: reservar só lugares com muitas avaliações em sites conhecidos (Booking.com, Airbnb ou avaliações do Google); desconfiar de anúncio com pouca ou nenhuma avaliação ou de preço bom demais pra ser verdade; nunca pagar por transferência bancária nem fora da plataforma. Curto e calmo, sem alarmar.
 Quando a pergunta for de VOOS e a busca funcionar:
 - Traga poucas opções (2 ou 3). Em cada uma: companhia, rota típica ou paradas, e um preço aproximado.
 - Diga que o preço muda e é aproximado, na data de hoje.
@@ -1215,6 +1226,8 @@ _FLIGHT_QUESTION_RE = re.compile(
 _OTHER_TOPIC_RE = re.compile(
     r"("
     r"\brsvp\b|\bhotels?\b|\bhot[eé]is?\b|"
+    r"\bairbnb\b|\bapartments?\b|\bapartamentos?\b|\bpousadas?\b|\bhostels?\b|"
+    r"\bwhere to stay\b|\bplace to stay\b|\bonde ficar\b|"
     r"\bdress\b|\bvestidos?\b|\btraje\b|"
     r"\bceremon(?:y|ies)\b|\bcerim[oô]nia\b|"
     r"\bchurch\b|\bigreja\b|"
@@ -1225,6 +1238,16 @@ _OTHER_TOPIC_RE = re.compile(
 )
 _PT_HINT_RE = re.compile(
     r"\b(passagems?|voos?|voc[eê]|pra|n[aã]o|quanto|obrigad|barat[oa]|semana)\b",
+    re.IGNORECASE,
+)
+# Stay questions are often Portuguese without a flight word ("onde ficar").
+_PT_STAY_HINT_RE = re.compile(
+    r"("
+    r"\bonde\b|\bficar\b|\bhosped\w*|\bindica\w*|\bpousadas?\b|"
+    r"\bapartamentos?\b|\bpreciso\b|\btamb[eé]m\b|\bperto\b|"
+    r"\bavalia\w*|\bigreja\b|\bcasamento\b|\bvocês\b|"
+    r"\bopções\b|\bopcoes\b|\bquarto\b|\bum hotel\b"
+    r")",
     re.IGNORECASE,
 )
 _ORIGIN_PATTERNS = (
@@ -1259,7 +1282,8 @@ _flight_inline = threading.local()
 
 
 def reply_language(message):
-    if _PT_HINT_RE.search(message or ""):
+    text = message or ""
+    if _PT_HINT_RE.search(text) or _PT_STAY_HINT_RE.search(text):
         return "pt"
     return "en"
 
@@ -1528,6 +1552,599 @@ def begin_flight_answer(phone, user_message, system_text, messages):
     return ack
 
 
+# Hotel search follows the flight shape: ack first, one small live search,
+# saved recommendations only if that search does not run. Cap stays lower
+# than flights so a stay question cannot run away with tokens.
+HOTEL_SEARCH_MAX_USES = 2
+HOTEL_SEARCH_TIMEOUT_SECONDS = 40
+HOTEL_SEARCH_ACK_EN = (
+    "I'm going to search now, I'll message you as soon as I find good options 🏨"
+)
+HOTEL_SEARCH_ACK_PT = (
+    "Vou pesquisar agora e te mando mensagem assim que achar boas opções 🏨"
+)
+_hotel_context_phones = set()
+
+_STRONG_STAY_RE = re.compile(
+    r"("
+    r"\bwhere (?:to|should|can|do|shall) (?:i|we|you) stay\b|"
+    r"\bplaces? to stay\b|"
+    r"\bonde\b.{0,40}\b(?:ficar|hospedar)\b|"
+    r"\blugares? (?:pra|para) ficar\b|"
+    r"\bhotel recommendations?\b|"
+    r"\brecomenda\w* (?:de |um |o )?hot[eé]l|"
+    r"\bsugest\w* de hot[eé]l"
+    r")",
+    re.IGNORECASE,
+)
+_LODGING_NOUN_RE = re.compile(
+    r"("
+    r"\bhotels?\b|\bhot[eé]is?\b|"
+    r"\bhostels?\b|\balbergues?\b|"
+    r"\bairbnb\b|"
+    r"\bapartments?\b|\bapartamentos?\b|"
+    r"\bpousadas?\b|"
+    r"\baccommodations?\b|"
+    r"\bhospedagem\b|"
+    r"\bacomoda[cç][aã]o\b|"
+    r"\broom in rome\b|\bquarto em roma\b"
+    r")",
+    re.IGNORECASE,
+)
+_FIND_STAY_RE = re.compile(
+    r"("
+    r"\bfind\b|\blooking\b|\brecommend\w*|\bsuggest\w*|\bchoose\b|\bescolher\b|"
+    r"\bindica\w*|\bachar\b|\bprocur\w*|"
+    r"\boptions?\b|\bop[cç][oõ]es\b|"
+    r"\bbook\b|\breserv\w*|"
+    r"\bneed a\b|\bpreciso\b|\bquero\b|\bqueremos\b|\bgostaria\b|"
+    r"\bajuda\w*|"
+    r"\bnear\b|\bperto\b|\bclose to\b|\bcloser\b|\bclosest\b|\bmais perto\b|"
+    r"\bcheap\b|\bbarat\w*|"
+    r"\bprices?\b|\bpre[cç]os?\b|"
+    r"\bstay\b|\bficar\b|"
+    r"\bcentro\b|"
+    r"\brent\b|\brental\b|"
+    r"\ba pé\b|\bwalking\b"
+    r")",
+    re.IGNORECASE,
+)
+_PERSONAL_STAY_STATUS_RE = re.compile(
+    r"("
+    r"\b(?:my|our) (?:hotel|room|stay|accommodation)\b.{0,40}\b(?:paid|covered|included|booked)\b|"
+    r"\b(?:paid|covered|included|paying) (?:for )?(?:my|our) (?:hotel|room|stay|accommodation)\b|"
+    r"\bis (?:my|our) (?:hotel|accommodation|stay|room)\b|"
+    r"\bwho (?:is |'s )?paying\b|"
+    r"\baccommodation (?:included|covered|paid)\b|"
+    r"\bminha (?:hospedagem|acomoda[cç][aã]o)\b|"
+    r"\bhospedagem (?:est[aá] )?(?:paga|coberta|inclu)|"
+    r"\bquem paga\b|"
+    r"\bpor (?:minha|nossa|sua) conta\b|"
+    r"\bvocês pagam\b|\bnoivos (?:pagam|cobrem|pagando)\b|"
+    r"\b(?:hotel|hospedagem|accommodation|stay|room) (?:is |está |esta )?(?:paid|paga|pago|covered|cobert\w*)"
+    r")",
+    re.IGNORECASE,
+)
+_RSVP_ASK_RE = re.compile(
+    r"("
+    r"\brsvp\b|confirmar presen[cç]a|formul[aá]rio de rsvp|"
+    r"\bj[aá] confirmei\b|\bconfirm(?:ed)? (?:my )?attendance\b"
+    r")",
+    re.IGNORECASE,
+)
+_EVENT_LOGISTICS_RE = re.compile(
+    r"("
+    r"\bpick[\s-]?up\b|\bponto de encontro\b|\bmeeting point\b|"
+    r"\bbus to\b|\bônibus at[eé]\b|\bonibus ate\b|"
+    r"transporte (?:at[eé] a igreja|para a igreja|pro casamento|da vin)"
+    r")",
+    re.IGNORECASE,
+)
+_TOUR_BOOKING_RE = re.compile(
+    r"("
+    r"\btours?\b|\bpasseios?\b|"
+    r"\bguided tour\b|\bguia tur[ií]stic\w*"
+    r")",
+    re.IGNORECASE,
+)
+_TRANSFER_BOOKING_RE = re.compile(
+    r"("
+    r"\bairport transfer\b|\bprivate transfer\b|\bhotel transfer\b|"
+    r"\bairport shuttle\b|"
+    r"\btransfers? from\b|\btransfers? to\b|"
+    r"\bbook(?:ing)? (?:a |an )?transfer\b|"
+    r"\btraslados?\b|"
+    r"\bmotorista particular\b|"
+    r"\bvan do aeroporto\b|"
+    r"traslado do aeroporto|transfer do aeroporto"
+    r")",
+    re.IGNORECASE,
+)
+_GIFT_PAYMENT_RE = re.compile(
+    r"("
+    r"\bpix\b|\bzelle\b|\brevolut\b|"
+    r"\bhoneymoon\b|\blua de mel\b|"
+    r"\bgifts?\b|\bpresentes?\b|"
+    r"\bbank transfer\b|\bwire transfer\b|"
+    r"transfer[eê]ncia banc[aá]ria"
+    r")",
+    re.IGNORECASE,
+)
+
+SCAM_WARNING_EN = (
+    "A quick friendly note: only book places with plenty of reviews on well-known "
+    "sites such as Booking.com, Airbnb or Google. Be wary of listings with few or "
+    "no reviews, or prices that look too good to be true, and never pay by bank "
+    "transfer or outside the booking site."
+)
+SCAM_WARNING_PT = (
+    "Um recado rápido: reserve só lugares com muitas avaliações em sites conhecidos, "
+    "como Booking.com, Airbnb ou o Google. Desconfie de anúncio com pouca ou nenhuma "
+    "avaliação, ou de preço bom demais pra ser verdade, e nunca pague por transferência "
+    "bancária nem fora da plataforma."
+)
+BOOKING_SCAM_NOTE = (
+    "\n\n[NOTA INTERNA — NÃO leia isso em voz alta: a pessoa está pedindo ajuda para "
+    "reservar hotel, apartamento, passeio ou transfer. Nesta resposta, no idioma dela, "
+    "inclua um lembrete curto e calmo: reservar só em lugar com muitas avaliações em "
+    "site conhecido (Booking.com, Airbnb ou Google); desconfiar de anúncio com pouca "
+    "ou nenhuma avaliação ou preço bom demais; nunca pagar por transferência bancária "
+    "nem fora da plataforma. Sem alarmismo.]\n"
+)
+
+_SAVED_HOTEL_LINES_EN = """\
+🏨 Hotel Castellino Roma (4★)
+~3-4 min walk to the church | ~17 min to Flann O'Brien
+~€312-347/night (2 people)
+https://www.booking.com/Share-rPP6D1l
+🏨 Hotel Hiberia (3★)
+~6-8 min walk to the church | ~11 min to the pub
+~US$250 / ~€218/night (2 people)
+https://www.booking.com/Share-C3S3rD4
+🏨 Hotel Regno (3★) — 2027 bookings opening soon
+~8 min walk to the church | ~17 min to the pub
+about €180-280/night (2 people)
+https://www.booking.com/Share-eQuUYXw
+Luxury, same central area:
+🌟 NH Collection Roma Fori Imperiali — ~€400-550/night — https://www.booking.com/Share-ex24085
+🌟 Radisson Collection Hotel, Roma Antica — ~€450-550/night — https://www.booking.com/Share-joubljX
+🌟 Singer Palace Hotel Roma — ~€500-750/night — https://www.booking.com/Share-Q1rOjM
+🌟 Umiltà 36 — ~€600-750/night — https://www.booking.com/Share-XglqAFK"""
+
+_SAVED_HOTEL_LINES_PT = """\
+🏨 Hotel Castellino Roma (4★)
+~3-4 min a pé da igreja | ~17 min a pé do Flann O'Brien
+~€312-347/noite (2 pessoas)
+https://www.booking.com/Share-rPP6D1l
+🏨 Hotel Hiberia (3★)
+~6-8 min a pé da igreja | ~11 min a pé do pub
+~US$250 / ~€218/noite (2 pessoas)
+https://www.booking.com/Share-C3S3rD4
+🏨 Hotel Regno (3★) — reservas de 2027 abrindo em breve
+~8 min a pé da igreja | ~17 min a pé do pub
+cerca de €180-280/noite (2 pessoas)
+https://www.booking.com/Share-eQuUYXw
+Luxo, na mesma região central:
+🌟 NH Collection Roma Fori Imperiali — ~€400-550/noite — https://www.booking.com/Share-ex24085
+🌟 Radisson Collection Hotel, Roma Antica — ~€450-550/noite — https://www.booking.com/Share-joubljX
+🌟 Singer Palace Hotel Roma — ~€500-750/noite — https://www.booking.com/Share-Q1rOjM
+🌟 Umiltà 36 — ~€600-750/noite — https://www.booking.com/Share-XglqAFK"""
+
+
+def scam_warning(message):
+    if reply_language(message) == "pt":
+        return SCAM_WARNING_PT
+    return SCAM_WARNING_EN
+
+
+def _has_scam_warning(text):
+    low = (text or "").lower()
+    mentions_reviews = any(word in low for word in ("review", "avalia"))
+    mentions_payment = any(word in low for word in (
+        "bank transfer",
+        "transferência",
+        "transferencia",
+        "outside the booking",
+        "fora da plataforma",
+        "fora do site",
+    ))
+    return mentions_reviews and mentions_payment
+
+
+def ensure_scam_warning(text, message):
+    """Append the booking reminder when the reply does not already include it."""
+    text = (text or "").strip()
+    if _has_scam_warning(text):
+        if len(text) <= WHATSAPP_TEXT_LIMIT:
+            return text
+        return _cap_keeping_warning(text, message)
+    warning = scam_warning(message)
+    sep = "\n\n"
+    budget = WHATSAPP_TEXT_LIMIT - len(sep) - len(warning)
+    if len(text) > budget:
+        text = cap_whatsapp_text(text[:budget])
+        if len(text) > budget:
+            text = text[:budget].rstrip()
+    if not text:
+        return warning
+    return text + sep + warning
+
+
+def _cap_keeping_warning(text, message):
+    warning = scam_warning(message)
+    if warning in (text or "") and len(text) > WHATSAPP_TEXT_LIMIT:
+        head = text[: text.rfind(warning)].rstrip()
+        keep = WHATSAPP_TEXT_LIMIT - len(warning) - 2
+        if len(head) > keep:
+            head = cap_whatsapp_text(head[:keep])
+            if len(head) > keep:
+                head = head[:keep].rstrip()
+        return head + "\n\n" + warning
+    return cap_whatsapp_text(text)
+
+
+def hotel_search_ack(message):
+    if reply_language(message) == "pt":
+        return HOTEL_SEARCH_ACK_PT
+    return HOTEL_SEARCH_ACK_EN
+
+
+def _stay_words(text):
+    return re.findall(r"[\wÀ-ÿ']+", text or "")
+
+
+def _explicit_stay_search(text):
+    """A request to find a place to stay, not a passing mention of the word hotel."""
+    if _STRONG_STAY_RE.search(text or ""):
+        return True
+    if not (_LODGING_NOUN_RE.search(text or "") and _FIND_STAY_RE.search(text or "")):
+        return False
+    # "What's the dress code? We'll stay in a hotel" should stay a normal reply.
+    # "Recommend a hotel, and what's the dress code?" should still search.
+    if _HOTEL_OTHER_TOPIC_RE.search(text or ""):
+        return re.search(
+            r"\b(recommend\w*|suggest\w*|find|looking|indica\w*|achar|procur\w*|"
+            r"book|reserv\w*|options?|op[cç]\w*|preciso|need a|airbnb|apartments?|"
+            r"apartamentos?|pousadas?|hostels?|where to stay|onde ficar)\b",
+            text or "",
+            re.IGNORECASE,
+        ) is not None
+    return True
+
+
+def is_personal_stay_status(message):
+    """True when they are asking who pays for THEIR room, not where to stay."""
+    text = message or ""
+    if _STRONG_STAY_RE.search(text):
+        return False
+    if _explicit_stay_search(text) and not re.search(r"\b(?:my|our|minha)\b", text, re.IGNORECASE):
+        return False
+    return _PERSONAL_STAY_STATUS_RE.search(text) is not None
+
+
+def _short_lodging_ask(text):
+    """A message that is basically just 'hotel' / 'hotels in Rome'."""
+    if _EVENT_LOGISTICS_RE.search(text or "") or _RSVP_ASK_RE.search(text or ""):
+        return False
+    words = _stay_words(text)
+    if not words or len(words) > 4:
+        return False
+    return _LODGING_NOUN_RE.search(text or "") is not None
+
+
+def is_hotel_stay_question(message, phone=None):
+    """True when a guest wants help finding a place to stay in Rome."""
+    text = message or ""
+    if is_personal_stay_status(text):
+        if phone:
+            _hotel_context_phones.discard(phone)
+        return False
+    if _is_bare_ack(text):
+        return False
+    finding = _explicit_stay_search(text) or _short_lodging_ask(text)
+    if _RSVP_ASK_RE.search(text) and not _explicit_stay_search(text):
+        if phone:
+            _hotel_context_phones.discard(phone)
+        return False
+    if _EVENT_LOGISTICS_RE.search(text) and not _explicit_stay_search(text):
+        if phone:
+            _hotel_context_phones.discard(phone)
+        return False
+    if finding:
+        return True
+    if not phone or phone not in _hotel_context_phones:
+        return False
+    if _HOTEL_OTHER_TOPIC_RE.search(text):
+        _hotel_context_phones.discard(phone)
+        return False
+    if _FLIGHT_QUESTION_RE.search(text):
+        _hotel_context_phones.discard(phone)
+        return False
+    return True
+
+
+# Landmarks (church, pub) stay in a hotel thread: "closer to the church" is
+# still about where to sleep. Schedule, RSVP, flights and dress leave it.
+_HOTEL_OTHER_TOPIC_RE = re.compile(
+    r"("
+    r"\brsvp\b|"
+    r"\bflights?\b|\bvoos?\b|\bpassagems?\b|\bairfare\b|"
+    r"\bdress\b|\bvestidos?\b|\btraje\b|"
+    r"\bceremon(?:y|ies)\b|\bcerim[oô]nia\b|"
+    r"\bpassports?\b|\bpassaportes?\b|"
+    r"\bwiner(?:y|ies)\b|\bvin[ií]cola\b|"
+    r"\bwhat time\b|\bque horas\b|"
+    r"\bdress code\b|\bvestir\b"
+    r")",
+    re.IGNORECASE,
+)
+
+
+def needs_booking_scam_warning(message):
+    """Hotels, rentals, tours and private transfers — not gifts or the wedding bus."""
+    text = message or ""
+    if is_personal_stay_status(text):
+        return False
+    if _GIFT_PAYMENT_RE.search(text) and not (
+        _LODGING_NOUN_RE.search(text) or _TOUR_BOOKING_RE.search(text) or _TRANSFER_BOOKING_RE.search(text)
+    ):
+        return False
+    if is_hotel_stay_question(text):
+        return True
+    if _TOUR_BOOKING_RE.search(text):
+        return True
+    if _TRANSFER_BOOKING_RE.search(text):
+        return True
+    return False
+
+
+def hotel_search_override(user_message, messages):
+    # Same signature as the flight override. The stay question is fully in user_message.
+    del messages
+    return (
+        "\n\n[NOTA INTERNA — BUSCA AO VIVO OBRIGATÓRIA NESTA RESPOSTA]\n"
+        "A pessoa pediu ajuda para achar hotel ou lugar para ficar em Roma. "
+        "A sua PRIMEIRA ação é chamar a ferramenta web_search. "
+        "Busque hotéis bem avaliados perto dos eventos do casamento: Basílica Santa Maria "
+        "in Aracoeli (Piazza Venezia / centro histórico) e Via Nazionale (pub). "
+        "Datas de referência: hóspedes ficam por volta de 22 a 27 de junho de 2027. "
+        "O casamento é sexta 25 de junho de 2027.\n"
+        "Na resposta final, no idioma da pessoa:\n"
+        "1. Comece pelas 7 opções salvas desta lista (Castellino, Hiberia, Regno e os 4 de luxo), "
+        "com distância a pé, faixa de preço e link, quando ainda fizerem sentido para o que ela pediu.\n"
+        "2. Depois, no máximo 2 alternativas da busca ao vivo, bem avaliadas e perto dos eventos, "
+        "com faixa de preço se a busca trouxer, e link de site conhecido "
+        "(Booking.com, site do hotel, Google ou Airbnb). Não invente preço nem número de avaliações.\n"
+        "3. Diga que preço e disponibilidade mudam e valem hoje.\n"
+        "4. Um aviso curto e calmo, no idioma da pessoa: reservar só em lugar com muitas avaliações "
+        "em site conhecido (Booking.com, Airbnb ou Google); desconfiar de anúncio com pouca ou "
+        "nenhuma avaliação ou preço bom demais; nunca pagar por transferência bancária nem fora da plataforma.\n"
+        "Não diga que vai pesquisar — esse aviso já foi enviado. "
+        "Se a pessoa também perguntou de RSVP, horário, dress code, passeio, transfer ou "
+        "transporte do casamento, responda isso na mesma mensagem (com o link do RSVP se for o caso). "
+        "NUNCA reserve, cobre, ou peça cartão ou pagamento.\n"
+    )
+
+
+def _hotel_tool(max_uses):
+    return {
+        "type": "web_search_20250305",
+        "name": "web_search",
+        "max_uses": max_uses,
+    }
+
+
+def _hotel_search_call(system_text, model_messages, max_uses):
+    return _anthropic_messages_create(
+        model="claude-haiku-4-5-20251001",
+        max_tokens=1024,
+        system=system_text,
+        messages=model_messages,
+        timeout=HOTEL_SEARCH_TIMEOUT_SECONDS,
+        extra_body={"tools": [_hotel_tool(max_uses)]},
+    )
+
+
+def _with_hotel_links(text):
+    low = (text or "").lower()
+    if any(site in low for site in (
+        "booking.com", "airbnb.", "hotels.com", "google.com/travel/hotels", "google.com/maps",
+    )):
+        return text
+    return (text or "").rstrip() + (
+        "\n\nBooking.com: https://www.booking.com\n"
+        "Google hotels: https://www.google.com/travel/hotels"
+    )
+
+
+def _label_saved_hotels(text, message):
+    low = (text or "").lower()
+    if any(phrase in low for phrase in (
+        "larissa saved", "saved recommendation", "not a live search",
+        "larissa salvou", "recomendações salvas", "não uma busca ao vivo",
+        "nao uma busca ao vivo",
+    )):
+        return text
+    if reply_language(message) == "pt":
+        prefix = (
+            "Estas são as recomendações de hotéis que a Larissa salvou, não uma busca ao vivo. "
+            "Os preços são estimativa e podem mudar.\n\n"
+        )
+    else:
+        prefix = (
+            "These are the hotel recommendations Larissa saved, not a live search. "
+            "Prices are estimates and can change.\n\n"
+        )
+    return prefix + (text or "")
+
+
+def _fallback_has_saved_hotels(text):
+    """The saved fallback has to name the three central picks, not a fragment."""
+    low = (text or "").lower()
+    return all(name in low for name in ("castellino", "hiberia", "regno"))
+
+
+def canned_hotel_fallback(message):
+    if reply_language(message) == "pt":
+        intro = (
+            "Estas são as recomendações de hotéis que a Larissa salvou, não uma busca ao vivo. "
+            "Os preços são estimativa e podem mudar.\n\n"
+            "Ficar no centro deixa vocês perto de tudo. Não precisa ser um desses — "
+            "qualquer hotel, pousada ou Airbnb bem avaliado serve.\n\n"
+        )
+        body = _SAVED_HOTEL_LINES_PT
+    else:
+        intro = (
+            "These are the hotel recommendations Larissa saved, not a live search. "
+            "Prices are estimates and can change.\n\n"
+            "Staying in the centre keeps you close to everything. You don't have to pick "
+            "one of these — any well-reviewed hotel, guesthouse or Airbnb is fine.\n\n"
+        )
+        body = _SAVED_HOTEL_LINES_EN
+    return intro + body + "\n\n" + scam_warning(message)
+
+
+def _saved_hotel_lead(message):
+    """Short reminder of Larissa's list when a live answer forgot to open with it."""
+    if reply_language(message) == "pt":
+        return (
+            "As primeiras sugestões continuam sendo as que a Larissa salvou, pertinho da igreja: "
+            "Hotel Castellino (https://www.booking.com/Share-rPP6D1l), "
+            "Hotel Hiberia (https://www.booking.com/Share-C3S3rD4) e "
+            "Hotel Regno (https://www.booking.com/Share-eQuUYXw).\n\n"
+        )
+    return (
+        "The first suggestions are still the ones Larissa saved, a short walk from the church: "
+        "Hotel Castellino (https://www.booking.com/Share-rPP6D1l), "
+        "Hotel Hiberia (https://www.booking.com/Share-C3S3rD4) and "
+        "Hotel Regno (https://www.booking.com/Share-eQuUYXw).\n\n"
+    )
+
+
+def _opens_with_saved_hotel(text):
+    head = (text or "")[:500].lower()
+    return any(name in head for name in ("castellino", "hiberia", "regno"))
+
+
+def finish_hotel_reply(text, user_message, labelled_saved=False):
+    text = (text or "").strip()
+    if labelled_saved:
+        text = _label_saved_hotels(text, user_message)
+    elif not _opens_with_saved_hotel(text):
+        text = _saved_hotel_lead(user_message) + text
+    text = _with_hotel_links(text)
+    text = ensure_scam_warning(text, user_message)
+    if len(text) <= WHATSAPP_TEXT_LIMIT:
+        return text
+    return _cap_keeping_warning(text, user_message)
+
+
+def hotel_notes_fallback(system_text, model_messages, user_message):
+    """Saved list, clearly labelled, when the live search does not run."""
+    import sys
+    print("HOTEL SEARCH FALLBACK: saved recommendations", file=sys.stderr)
+    try:
+        response = _anthropic_messages_create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=1024,
+            system=system_text + (
+                "\n\n[NOTA INTERNA — A BUSCA AO VIVO FALHOU]\n"
+                "Não diga que pesquisou ao vivo. A primeira frase, no idioma da pessoa, "
+                "diz que estas são as recomendações de hotéis que a Larissa salvou, "
+                "não uma busca ao vivo, e que o preço pode mudar. "
+                "Liste as 7 opções salvas (Castellino, Hiberia, Regno e os 4 de luxo) "
+                "com distância a pé, faixa de preço e link do Booking.com. "
+                "Inclua o aviso curto sobre golpes de reserva: muitas avaliações, site conhecido, "
+                "nada de transferência bancária nem pagamento fora da plataforma.\n"
+            ),
+            messages=model_messages,
+            timeout=40,
+        )
+        text = text_from_anthropic_response(response)
+        if text and _fallback_has_saved_hotels(text):
+            return finish_hotel_reply(text, user_message, labelled_saved=True)
+    except Exception as exc:
+        print(f"HOTEL NOTES FALLBACK ERROR: {exc}", file=sys.stderr)
+    return finish_hotel_reply(canned_hotel_fallback(user_message), user_message, labelled_saved=True)
+
+
+def lookup_live_hotels(system_text, model_messages, user_message):
+    """Search first. The saved hotel list is only used when search does not run."""
+    import sys
+    searched_system = system_text + hotel_search_override(user_message, model_messages)
+    try:
+        first = _hotel_search_call(searched_system, model_messages, HOTEL_SEARCH_MAX_USES)
+    except Exception as exc:
+        print(f"HOTEL SEARCH ERROR: {exc}", file=sys.stderr)
+        return hotel_notes_fallback(system_text, model_messages, user_message)
+    if response_used_web_search(first):
+        text = text_from_anthropic_response(first)
+        if text:
+            print("HOTEL SEARCH: live results", file=sys.stderr)
+            return finish_hotel_reply(text, user_message)
+        print("HOTEL SEARCH: tool ran but returned no text", file=sys.stderr)
+        return hotel_notes_fallback(system_text, model_messages, user_message)
+    print("HOTEL SEARCH: model answered without searching; retrying", file=sys.stderr)
+    retry_messages = list(model_messages) + [
+        {"role": "assistant", "content": "I need a live web search before I suggest hotels."},
+        {
+            "role": "user",
+            "content": (
+                "Call the web_search tool now for well-reviewed hotels near Santa Maria "
+                "in Aracoeli in Rome for 22-27 June 2027. Do not skip the search."
+            ),
+        },
+    ]
+    try:
+        second = _hotel_search_call(searched_system, retry_messages, HOTEL_SEARCH_MAX_USES)
+    except Exception as exc:
+        print(f"HOTEL SEARCH RETRY ERROR: {exc}", file=sys.stderr)
+        return hotel_notes_fallback(system_text, model_messages, user_message)
+    if response_used_web_search(second):
+        text = text_from_anthropic_response(second)
+        if text:
+            print("HOTEL SEARCH: live results on retry", file=sys.stderr)
+            return finish_hotel_reply(text, user_message)
+    print("HOTEL SEARCH: retry did not search", file=sys.stderr)
+    return hotel_notes_fallback(system_text, model_messages, user_message)
+
+
+def begin_hotel_answer(phone, user_message, system_text, messages):
+    """Ack now. Search in the background on WhatsApp, or finish inline on /test-chat."""
+    import sys
+    _hotel_context_phones.add(phone)
+    _flight_context_phones.discard(phone)
+    ack = hotel_search_ack(user_message)
+    model_messages = [dict(m) for m in messages]
+    add_to_conversation(phone, "assistant", ack)
+    save_state()
+    if _inline_flight_reply():
+        second = sanitize_for_whatsapp(
+            lookup_live_hotels(system_text, model_messages, user_message)
+        )
+        add_to_conversation(phone, "assistant", second)
+        save_state()
+        _flight_inline.messages = [ack, second]
+        return ack + "\n\n" + second
+
+    def job():
+        try:
+            second = lookup_live_hotels(system_text, model_messages, user_message)
+        except Exception as exc:
+            print(f"HOTEL SEARCH JOB ERROR: {exc}", file=sys.stderr)
+            second = canned_hotel_fallback(user_message)
+        second = sanitize_for_whatsapp(second)
+        add_to_conversation(phone, "assistant", second)
+        save_state()
+        try:
+            send_zapi_message(phone, second)
+        except Exception as exc:
+            print(f"HOTEL SEARCH SEND ERROR: {exc}", file=sys.stderr)
+
+    threading.Thread(target=job, daemon=True).start()
+    return ack
+
+
 # Portuguese words that only appear when someone is asking about air travel, so
 # a match means both "this message is in Portuguese" and "this is about flights"
 # without needing a language detector.
@@ -1594,7 +2211,12 @@ def get_aurora_response(phone_number, user_message):
     if _asks_about_flights_in_portuguese(user_message):
         system_text += VERONICA_NOTE
     if is_flight_or_fare_question(user_message, phone_number):
+        _hotel_context_phones.discard(phone_number)
         return begin_flight_answer(phone_number, user_message, system_text, messages)
+    if is_hotel_stay_question(user_message, phone_number):
+        return begin_hotel_answer(phone_number, user_message, system_text, messages)
+    if needs_booking_scam_warning(user_message):
+        system_text += BOOKING_SCAM_NOTE
     response = anthropic_client.messages.create(
         model="claude-haiku-4-5-20251001",
         max_tokens=1024,
@@ -1603,6 +2225,8 @@ def get_aurora_response(phone_number, user_message):
     )
     raw_text = response.content[0].text
     assistant_message = sanitize_for_whatsapp(raw_text)
+    if needs_booking_scam_warning(user_message):
+        assistant_message = ensure_scam_warning(assistant_message, user_message)
     add_to_conversation(phone_number, "assistant", assistant_message)
     save_state()
     return assistant_message
